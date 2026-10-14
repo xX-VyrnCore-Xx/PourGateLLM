@@ -13,3 +13,6 @@ models:
     family: gemini-2.5-flash-lite
     capabilities: [chat, tools, json_mode, vision]
     context: 1048576
+  - id: gemini-embedding-001
+    family: gemini-embedding
+    capabilities: [embeddings]

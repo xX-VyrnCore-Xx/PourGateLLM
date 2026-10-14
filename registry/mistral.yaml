@@ -11,3 +11,6 @@ models:
     tier: small
     family: mistral-nemo
     capabilities: [chat, tools, json_mode]
+  - id: mistral-embed
+    family: mistral-embed
+    capabilities: [embeddings]

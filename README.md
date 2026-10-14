@@ -48,7 +48,7 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 
 | | |
 |---|---|
-| 🔌 **OpenAI-compatible API** | `GET /v1/models` and `POST /v1/chat/completions` with streaming passthrough. Use `"model": "auto"` or a specific model id. |
+| 🔌 **OpenAI-compatible API** | `GET /v1/models`, `POST /v1/chat/completions` (streaming passthrough) and `POST /v1/embeddings`. Use `"model": "auto"` or a specific model id. |
 | 🧠 **Complexity routing** | `"model": "auto"` classifies each prompt (size, code, reasoning, tools…) and tries small, fast models for easy questions and the strongest ones for hard tasks, with automatic fallback to the other tiers. |
 | 🔁 **Smart failover** | On `429` / `5xx` / network errors it rotates to the next key, then the next model, honoring `Retry-After`. |
 | 📊 **Real quota accounting** | `rpm`, `rpd`, `tpm`, `tpd` enforced per key *and* model. Daily counters and cooldowns persist in SQLite. |
@@ -142,6 +142,8 @@ console.log(reply.choices[0]?.message.content);
 Every response carries `x-pourgate-provider` and `x-pourgate-model` headers so you can see who answered.
 
 See [Complexity routing](#-complexity-routing) for how `auto` picks a model.
+
+**Embeddings** use the same keys, limits, failover and privacy controls: `POST /v1/embeddings` with `"model": "auto"` (least-used embedding model) or a registry model with the `embeddings` capability. Embedding models never serve chat requests and vice versa.
 
 ## 🧭 How it works
 
@@ -370,7 +372,8 @@ Found a vulnerability? Please open a private security advisory on GitHub rather 
 - [ ] OpenTelemetry (OTLP) tracing
 - [x] PII redaction and per-provider privacy policies
 - [ ] Plugin system for providers, strategies and middleware
-- [ ] Anthropic Messages, embeddings, images and audio endpoints
+- [x] Embeddings endpoint
+- [ ] Anthropic Messages, images and audio endpoints
 - [ ] Desktop app
 
 See [DESIGN.md](DESIGN.md) for the full vision, architecture and open questions.

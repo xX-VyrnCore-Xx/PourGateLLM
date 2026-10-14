@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import type { ProviderEntry } from '@pourgate/shared';
 import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
@@ -15,7 +15,7 @@ import type { RequestLog } from './requestlog.js';
 import { KeyPool } from './keypool.js';
 import type { PoolManager } from './pools.js';
 import { SlidingWindow } from './ratelimit.js';
-import { VIRTUAL_MODELS, errorResponse, routeChat, type Scoring } from './router.js';
+import { VIRTUAL_MODELS, errorResponse, routeChat, type Endpoint, type Scoring } from './router.js';
 import type { TokenRecord, TokenStore } from './tokens.js';
 
 export interface AppOptions {
@@ -125,7 +125,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     return c.json({ object: 'list', data });
   });
 
-  app.post('/v1/chat/completions', async (c) => {
+  const handle = async (c: Context<{ Variables: { principal: Principal } }>, endpoint: Endpoint): Promise<Response> => {
     let body: unknown;
     try {
       body = await c.req.json();
@@ -136,8 +136,11 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       return errorResponse(400, 'Request body must be a JSON object', 'invalid_request_error');
     }
     const payload = body as Record<string, unknown>;
-    if (typeof payload.model !== 'string' || !Array.isArray(payload.messages)) {
+    if (endpoint === 'chat' && (typeof payload.model !== 'string' || !Array.isArray(payload.messages))) {
       return errorResponse(400, "'model' (string) and 'messages' (array) are required", 'invalid_request_error');
+    }
+    if (endpoint === 'embeddings' && (typeof payload.model !== 'string' || payload.input === undefined || payload.input === null || payload.input === '')) {
+      return errorResponse(400, "'model' (string) and 'input' are required", 'invalid_request_error');
     }
 
     const principal = c.get('principal');
@@ -188,7 +191,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     };
 
     // Exact-match response cache (opt-in): scoped per client and privacy settings, bypassable per request.
-    const cache = opts.cache;
+    const cache = endpoint === 'chat' ? opts.cache : undefined;
     const cacheControl = c.req.header('cache-control')?.toLowerCase() ?? '';
     const bypass =
       /\b(no-cache|no-store)\b/.test(cacheControl) ||
@@ -213,8 +216,9 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     const routed = await routeChat(
       { registry: getRegistry(), pools: opts.pools, fetch: doFetch, privacy, scoring: opts.scoring },
       payload,
-      payload.model,
+      payload.model as string,
       c.req.raw.signal,
+      endpoint,
     );
     const ttfbMs = performance.now() - startedAt;
     const res =
@@ -250,7 +254,10 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         .catch(() => {});
     }
     return res;
-  });
+  };
+
+  app.post('/v1/chat/completions', (c) => handle(c, 'chat'));
+  app.post('/v1/embeddings', (c) => handle(c, 'embeddings'));
 
   if (opts.adminPassword) {
     app.route(
