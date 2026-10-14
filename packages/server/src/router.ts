@@ -1,5 +1,6 @@
 import type { ModelEntry, ProviderEntry, Tier } from '@pourgate/shared';
 import { COMPLEXITY_TIER, TIER_ORDER, analyzePrompt, requiredCapabilities, type Analysis } from './complexity.js';
+import { rankScore, type ModelScore, type Strategy } from './evals.js';
 import { KeyPool } from './keypool.js';
 import { DEFAULT_PRIVACY, needsRedaction, providerAllowed, redactBody, type PrivacyConfig } from './privacy.js';
 
@@ -14,6 +15,13 @@ export interface RouterDeps {
   fetch: typeof fetch;
   /** Per-request privacy settings (operator config, possibly tightened by the client). */
   privacy?: PrivacyConfig;
+  /** Measured model quality, used to order models inside a tier. */
+  scoring?: Scoring;
+}
+
+export interface Scoring {
+  strategy: Strategy;
+  score: (provider: string, model: string) => ModelScore | undefined;
 }
 
 export const AUTO_MODEL = 'auto';
@@ -48,6 +56,7 @@ export function rankCandidates(
   preferred: Tier,
   analysis: Analysis,
   usageToday: (c: Candidate) => number,
+  scoring?: Scoring,
 ): Candidate[] {
   const caps = requiredCapabilities(analysis.needs);
   const order = TIER_ORDER[preferred];
@@ -55,8 +64,13 @@ export function rankCandidates(
   return candidates
     .filter((c) => caps.every((cap) => c.model.capabilities.includes(cap)))
     .filter((c) => c.model.context === undefined || analysis.promptTokens < c.model.context)
-    .map((c, i) => ({ c, i, usage: usageToday(c) }))
-    .sort((a, b) => tierRank(a.c) - tierRank(b.c) || a.usage - b.usage || a.i - b.i)
+    .map((c, i) => ({
+      c,
+      i,
+      usage: usageToday(c),
+      score: scoring ? rankScore(scoring.strategy, scoring.score(c.provider.provider, c.model.id)) : 0,
+    }))
+    .sort((a, b) => tierRank(a.c) - tierRank(b.c) || b.score - a.score || a.usage - b.usage || a.i - b.i)
     .map((x) => x.c);
 }
 
@@ -102,7 +116,7 @@ export async function routeChat(
     analysis = analyzePrompt(body);
     const preferred = virtual.forced ?? COMPLEXITY_TIER[analysis.complexity];
     const total = candidates.length;
-    candidates = rankCandidates(candidates, preferred, analysis, (c) => deps.pools.get(c.provider.provider)?.usageToday(c.model.id).requests ?? 0);
+    candidates = rankCandidates(candidates, preferred, analysis, (c) => deps.pools.get(c.provider.provider)?.usageToday(c.model.id).requests ?? 0, deps.scoring);
     if (candidates.length === 0 && total > 0) {
       return errorResponse(
         400,

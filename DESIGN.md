@@ -85,7 +85,7 @@ models:
 
 1. **Filtro**: capability richieste (tools, vision, contesto) + policy privacy dell'utente.
 2. **Candidati**: modelli con almeno una chiave non in cooldown e quota residua.
-3. **Punteggio**: combinazione pesata di qualità (eval), velocità (p50/TTFT), affidabilità (tasso errori), quota residua.
+3. **Punteggio** (implementato): eval periodiche con controlli deterministici (`evals/suite.json`) misurano qualità, affidabilità e latenza p50 per modello; `POURGATE_ROUTING_STRATEGY` (`spread|balanced|quality|speed`) ordina i modelli dentro un tier usando questi punteggi, con minimo 3 campioni (altrimenti neutro).
 4. **Strategie**: `quality`, `speed`, `quota`, `balanced`, profili nominati (`auto:coding`, `auto:vision`).
 5. **Complessità** (implementato, `packages/server/src/complexity.ts`): classificatore euristico deterministico che non consuma quota. Somma segnali (lunghezza, codice, termini di ragionamento/ingegneria EN+IT, matematica, profondità della conversazione, tool, output strutturato, output lungo, `reasoning_effort`) in un punteggio → `easy`/`medium`/`hard` → tier `small`/`medium`/`large` (campo `tier` del registry). Il tier è una **preferenza**: gli altri restano come fallback. Dentro un tier vince il modello meno usato oggi. Si filtrano i modelli senza le capability richieste (tools, JSON, vision) o con contesto troppo piccolo. Modelli virtuali: `auto` (classifica) e `auto:small|medium|large` (forza il tier). Header di risposta: `x-pourgate-complexity`, `x-pourgate-tier`. Evoluzione possibile: classificatore con un piccolo modello gratuito per i casi ambigui.
 6. **Failover**: su 429/5xx cooldown + rotazione chiave + modello successivo; sticky di conversazione opzionale.

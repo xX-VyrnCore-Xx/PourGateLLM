@@ -53,6 +53,7 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 | 🔁 **Smart failover** | On `429` / `5xx` / network errors it rotates to the next key, then the next model, honoring `Retry-After`. |
 | 📊 **Real quota accounting** | `rpm`, `rpd`, `tpm`, `tpd` enforced per key *and* model. Daily counters and cooldowns persist in SQLite. |
 | 🔑 **Per-client tokens** | Create tokens with their own rate limit, daily quota and expiry. Stored as SHA-256 hashes, revocable any time. |
+| 🎯 **Measured model quality** | Periodic mini-benchmarks (deterministic checks, ~24 tasks) score every model on quality, reliability and latency; routing can prefer the proven ones (`quality`, `speed`, `balanced`). |
 | ⚡ **Response cache** | Opt-in exact-match cache for repeatable requests (temperature 0 or a seed): repeated prompts cost no provider quota. Scoped per client, bypassable per request. |
 | 🛡️ **Privacy controls** | Mask emails, phones, cards, IBANs, tax ids and secrets before prompts leave the gateway, and exclude providers that train on prompts. Clients can tighten (never loosen) per request. |
 | 📈 **Analytics & metrics** | Request log (metadata only, never prompts), dashboard analytics (volume, errors, p50/p95 latency, tokens per model), JSONL export and a Prometheus `/metrics` endpoint. |
@@ -202,6 +203,18 @@ Responses include `x-pourgate-complexity` (for `auto`) and `x-pourgate-tier` so 
 
 Set `POURGATE_ADMIN_PASSWORD` to enable it. Sessions use an `HttpOnly`, `SameSite=Strict` cookie, login attempts are rate-limited, and cross-origin writes are rejected. Serve it over HTTPS and set `POURGATE_COOKIE_SECURE=true`.
 
+## 🎯 Model quality evals
+
+Registry tiers are guesses; evals measure. [`evals/suite.json`](evals/suite.json) holds ~24 short tasks (arithmetic, knowledge, reasoning, instruction following, JSON output, code reading, Italian) with **deterministic checks**: exact match, substring, regex or JSON fields. No LLM judge, so results are cheap, reproducible and easy to extend with a PR.
+
+- **Run:** press **Run evals** in the dashboard (Providers tab), or set `POURGATE_EVAL_HOURS`. Each run sends `POURGATE_EVAL_TASKS` tasks (rotating through the suite) to every model that has a key, with `temperature: 0`.
+- **Scores:** *quality* = passed / answered, *reliability* = answered / attempted, *latency* = median time of passed tasks, over the last 14 days. A model needs at least 3 samples to be trusted; until then it is treated as neutral, so new models still get tried.
+- **Use:** `POURGATE_ROUTING_STRATEGY` decides how `auto` orders models **inside a tier**: `spread` (default, ignores scores), `quality`, `speed` or `balanced` (60% quality, 30% reliability, 10% speed).
+- **Cost:** eval calls go through the normal key pool, so they respect and **consume** your free-tier limits. Keep `POURGATE_EVAL_TASKS` small and `POURGATE_EVAL_HOURS` high.
+
+> [!NOTE]
+> A small suite gives a coarse signal: use it to demote models that are broken, rate-limited or clearly weaker, not to rank close competitors.
+
 ## ⚡ Response cache
 
 Off by default. Set `POURGATE_CACHE_TTL_SECONDS` to serve repeated identical requests without calling a provider, so they use no free-tier quota and answer in milliseconds.
@@ -254,6 +267,10 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_MASTER_KEY` | auto | 32-byte key (hex or base64) encrypting dashboard-stored keys. Generate with `openssl rand -hex 32`. If unset, `data/master.key` is created on first start. |
 | `POURGATE_DB` | `data/pourgate.db` | SQLite database path. |
 | `PORT` | `3000` | HTTP port. |
+| `POURGATE_ROUTING_STRATEGY` | `spread` | How models are ordered inside a tier: `spread` (least used first), `balanced`, `quality` or `speed` (use measured scores). |
+| `POURGATE_EVAL_HOURS` | `0` (off) | Run the evals automatically every N hours (they consume free-tier quota). |
+| `POURGATE_EVAL_TASKS` | `4` | Tasks per model per run, rotating through the suite. |
+| `POURGATE_EVALS_FILE` | `evals/suite.json` | The eval suite. |
 | `POURGATE_CACHE_TTL_SECONDS` | `0` (off) | Enables the response cache; entries expire after this many seconds. |
 | `POURGATE_CACHE_MODE` | `deterministic` | `deterministic` caches requests with `temperature: 0` or a `seed`; `all` caches every non-streaming request. |
 | `POURGATE_CACHE_MAX_ENTRIES` | `1000` | Oldest entries are evicted beyond this. |
@@ -345,7 +362,7 @@ Found a vulnerability? Please open a private security advisory on GitHub rather 
 - [x] Encrypted provider keys
 - [x] Open registry with signed sync and overrides
 - [x] Docker image and Compose
-- [ ] Periodic evals to rank models on real quality, latency and reliability
+- [x] Periodic evals to rank models on quality, latency and reliability
 - [x] Routing by prompt complexity (heuristic classifier)
 - [x] Exact-match response cache
 - [ ] Semantic cache (embedding similarity)

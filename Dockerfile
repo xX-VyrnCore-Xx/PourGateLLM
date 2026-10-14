@@ -13,6 +13,7 @@ WORKDIR /app
 COPY --from=build /app/packages/server/dist ./dist
 COPY --from=build /app/packages/client/dist ./public
 COPY registry ./registry
+COPY evals ./evals
 RUN mkdir -p data && chown node:node data
 USER node
 VOLUME /app/data

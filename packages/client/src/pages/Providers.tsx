@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ModelQuality } from '../components/ModelQuality';
 import { ProviderKeys } from '../components/ProviderKeys';
 import { Button } from '../components/ui/button';
 import { Badge, Card } from '../components/ui/card';
@@ -37,6 +38,7 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {error && <p role="alert" className="text-sm text-red-600 md:col-span-2">{error}</p>}
+      <ModelQuality onUnauthorized={onUnauthorized} />
       <Card className="md:col-span-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
