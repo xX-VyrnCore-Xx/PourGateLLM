@@ -6,6 +6,7 @@ import type { ProviderEntry } from '@pourgate/shared';
 import { KeyStoreError, type KeyStore } from './keys.js';
 import type { KeyPool } from './keypool.js';
 import type { PoolManager } from './pools.js';
+import type { RequestLog } from './requestlog.js';
 import { SlidingWindow } from './ratelimit.js';
 import type { SyncStatus } from './registry-sync.js';
 import type { TokenStore } from './tokens.js';
@@ -23,6 +24,7 @@ export interface AdminOptions {
   /** Dashboard-managed provider keys (encrypted). Routes are disabled when unset. */
   keyStore?: KeyStore;
   poolManager?: PoolManager;
+  requestLog?: RequestLog;
   fetch?: typeof fetch;
   pools: Map<string, KeyPool>;
   /** Set the Secure cookie flag (use when served over HTTPS). */
@@ -152,6 +154,35 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     if (!opts.registrySync) return c.json({ error: 'registry sync is not configured' }, 404);
     if (!syncLimiter.take('sync', 6)) return c.json({ error: 'too many sync requests' }, 429);
     return c.json(await opts.registrySync.sync());
+  });
+
+  const RANGES: Record<string, { ms: number; bucketMs: number }> = {
+    '24h': { ms: 86_400_000, bucketMs: 3_600_000 },
+    '7d': { ms: 7 * 86_400_000, bucketMs: 6 * 3_600_000 },
+    '30d': { ms: 30 * 86_400_000, bucketMs: 86_400_000 },
+  };
+
+  app.get('/analytics', (c) => {
+    if (!opts.requestLog) return c.json({ error: 'request log is not configured' }, 404);
+    const range = RANGES[c.req.query('range') ?? '24h'];
+    if (!range) return c.json({ error: "range must be one of 24h, 7d, 30d" }, 400);
+    return c.json(opts.requestLog.analytics(now() - range.ms, range.bucketMs));
+  });
+
+  app.get('/requests', (c) => {
+    if (!opts.requestLog) return c.json({ error: 'request log is not configured' }, 404);
+    return c.json(opts.requestLog.recent(Number(c.req.query('limit') ?? 100) || 100));
+  });
+
+  // JSON Lines export of request metadata (no prompts or completions are ever stored).
+  app.get('/requests.jsonl', (c) => {
+    if (!opts.requestLog) return c.json({ error: 'request log is not configured' }, 404);
+    const range = RANGES[c.req.query('range') ?? '24h'] ?? RANGES['24h']!;
+    const body = opts.requestLog.since(now() - range.ms).map((e) => JSON.stringify(e)).join('\n');
+    return c.body(body ? `${body}\n` : '', 200, {
+      'content-type': 'application/x-ndjson',
+      'content-disposition': 'attachment; filename="pourgate-requests.jsonl"',
+    });
   });
 
   const providerByName = (name: string) => opts.registry().find((p) => p.provider === name);

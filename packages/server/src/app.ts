@@ -6,6 +6,9 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import type { ProviderEntry } from '@pourgate/shared';
 import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
 import type { KeyStore } from './keys.js';
+import type { Metrics } from './metrics.js';
+import { observeResponse } from './observe.js';
+import type { RequestLog } from './requestlog.js';
 import { KeyPool } from './keypool.js';
 import type { PoolManager } from './pools.js';
 import { SlidingWindow } from './ratelimit.js';
@@ -27,6 +30,11 @@ export interface AppOptions {
   /** Enables the admin API when set. */
   adminPassword?: string;
   secureCookie?: boolean;
+  /** Request metadata log (SQLite); enables analytics in the admin API. */
+  requestLog?: RequestLog;
+  /** Prometheus metrics registry; exposed at /metrics when `metricsToken` is also set. */
+  metrics?: Metrics;
+  metricsToken?: string;
   /** Directory with the built dashboard; served at / when it exists. */
   staticDir?: string;
 }
@@ -52,6 +60,33 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   const rpm = new SlidingWindow();
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
+
+  if (opts.metrics && opts.metricsToken) {
+    const metricsToken = opts.metricsToken;
+    app.get('/metrics', (c) => {
+      const header = c.req.header('authorization') ?? '';
+      if (!header.startsWith('Bearer ') || !matchesAny(header.slice(7), [metricsToken])) {
+        return c.text('unauthorized', 401);
+      }
+      const pools = [...opts.pools.entries()];
+      return c.text(
+        opts.metrics!.render([
+          {
+            name: 'pourgate_keys',
+            help: 'Provider API keys currently loaded.',
+            samples: pools.map(([provider, pool]) => ({ labels: { provider }, value: pool.keys.length })),
+          },
+          {
+            name: 'pourgate_keys_cooling',
+            help: 'Provider API keys currently cooling down.',
+            samples: pools.map(([provider, pool]) => ({ labels: { provider }, value: pool.coolingCount() })),
+          },
+        ]),
+        200,
+        { 'content-type': 'text/plain; version=0.0.4; charset=utf-8' },
+      );
+    });
+  }
 
   app.use('/v1/*', async (c, next) => {
     const header = c.req.header('authorization') ?? '';
@@ -108,12 +143,43 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       opts.store.recordRequest(record.id);
     }
 
-    const res = await routeChat(
+    const startedAt = performance.now();
+    const startedWall = Date.now();
+    const routed = await routeChat(
       { registry: getRegistry(), pools: opts.pools, fetch: doFetch },
       payload,
       payload.model,
       c.req.raw.signal,
     );
+    const ttfbMs = performance.now() - startedAt;
+    const res =
+      opts.requestLog || opts.metrics
+        ? observeResponse(routed, startedAt, (f) => {
+            const provider = routed.headers.get('x-pourgate-provider');
+            const model = routed.headers.get('x-pourgate-model');
+            const complexity = routed.headers.get('x-pourgate-complexity');
+            opts.metrics?.observe({ provider, model, status: routed.status, complexity, seconds: f.totalMs / 1000, tokens: f.tokens });
+            try {
+              opts.requestLog?.insert({
+                ts: startedWall,
+                tokenId: clientId ?? null,
+                requested: payload.model as string,
+                provider,
+                model,
+                tier: routed.headers.get('x-pourgate-tier'),
+                complexity,
+                status: routed.status,
+                ttfbMs,
+                totalMs: f.totalMs,
+                tokens: f.tokens,
+                stream: payload.stream === true,
+                error: f.error,
+              });
+            } catch (err) {
+              console.error('[requestlog] insert failed:', err instanceof Error ? err.message : err);
+            }
+          })
+        : routed;
 
     // Best-effort token accounting for non-streaming JSON responses.
     if (clientId !== undefined && res.ok && res.headers.get('content-type')?.includes('application/json')) {
@@ -141,6 +207,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         pools: opts.pools,
         keyStore: opts.keyStore,
         poolManager: opts.poolManager,
+        requestLog: opts.requestLog,
         fetch: opts.fetch,
         secureCookie: opts.secureCookie,
       }),

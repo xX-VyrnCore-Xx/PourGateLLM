@@ -67,6 +67,14 @@ export interface RegistryStatus {
   version: number | null;
 }
 
+export interface Analytics {
+  since: number;
+  bucketMs: number;
+  summary: { requests: number; errors: number; errorRate: number; tokens: number; p50Ms: number | null; p95Ms: number | null };
+  byModel: { provider: string; model: string; requests: number; errors: number; tokens: number; p50Ms: number | null; p95Ms: number | null }[];
+  series: { t: number; requests: number; errors: number }[];
+}
+
 export const api = {
   session: () => request<{ authenticated: boolean }>('/session'),
   login: (password: string) => request<void>('/login', { method: 'POST', body: JSON.stringify({ password }) }),
@@ -86,6 +94,7 @@ export const api = {
   removeProviderKey: (id: number) => request<void>(`/provider-keys/${id}`, { method: 'DELETE' }),
   testProviderKey: (id: number) =>
     request<{ ok: boolean; status: number | null }>(`/provider-keys/${id}/test`, { method: 'POST' }),
+  analytics: (range: string) => request<Analytics>(`/analytics?range=${encodeURIComponent(range)}`),
   registry: () => request<RegistryStatus | null>('/registry'),
   syncRegistry: () => request<RegistryStatus>('/registry/sync', { method: 'POST' }),
 };
