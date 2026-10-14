@@ -24,6 +24,17 @@ curl localhost:3000/v1/chat/completions \
 
 Use `"model": "auto"` to let the gateway pick any available model, or a specific model id.
 
+## Docker
+
+```bash
+cp .env.example .env   # set a strong POURGATE_TOKENS and your provider keys
+docker compose up -d --build
+docker compose exec pourgate node dist/cli.js tokens create --name laptop --rpm 30
+```
+
+The SQLite database lives in the `pourgate-data` volume. Change the host port with `PORT` in `.env`.
+Never keep the placeholder `POURGATE_TOKENS=pg-change-me`.
+
 ## Client tokens
 
 Create per-client tokens with quotas (stored hashed in SQLite, default `data/pourgate.db`, override with `POURGATE_DB`):
