@@ -8,8 +8,8 @@
 | Area | Scelta |
 |---|---|
 | Obiettivo | Gateway free-tier personale / piccolo team |
-| Stack | TypeScript, Node 20+ con Hono, monorepo pnpm |
-| Storage | SQLite (Drizzle ORM + migrazioni) |
+| Stack | TypeScript, Node 22.13+ con Hono, monorepo pnpm |
+| Storage | SQLite via `node:sqlite` integrato (Node >= 22.13), migrazioni SQL con `user_version`; Drizzle rimandato |
 | Dashboard | React + Vite + Tailwind + shadcn/ui |
 | Distribuzione | Docker/Compose, app desktop, CLI (`npx pourgate`) |
 | API day-1 | OpenAI Chat Completions + Models (streaming, tool calling) |
@@ -120,4 +120,4 @@ models:
 - **ToS dei provider**: la rotazione di molte chiavi/account può violare i termini. Il progetto deve dichiarare uso personale e rispetto dei limiti per chiave, senza incentivare multi-account abusivi.
 - **Qualità dei dati del registry**: serve un processo di verifica (CI + probing) per evitare dati obsoleti.
 - **Costo delle eval**: consumano quota gratuita; vanno limitate e schedulate a basso traffico.
-- **Decisi in seguito**: nome PourGateLLM; runtime Node 20+ con Hono; provider MVP: Groq, Google Gemini, Cerebras, Mistral, OpenRouter; UI e documentazione in inglese con i18n pronta (italiano come traduzione).
+- **Decisi in seguito**: nome PourGateLLM; runtime Node 22.13+ con Hono; provider MVP: Groq, Google Gemini, Cerebras, Mistral, OpenRouter; UI e documentazione in inglese con i18n pronta (italiano come traduzione).

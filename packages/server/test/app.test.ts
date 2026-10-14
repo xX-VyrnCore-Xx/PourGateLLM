@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolve } from 'node:path';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import type { ProviderEntry } from '@pourgate/shared';
 import { createApp } from '../src/app.js';
 import { KeyPool } from '../src/keypool.js';
+import { openDatabase } from '../src/db.js';
 import { loadRegistry } from '../src/registry.js';
+import { TokenStore } from '../src/tokens.js';
 
 const registry: ProviderEntry[] = [
   {
@@ -18,10 +22,11 @@ const registry: ProviderEntry[] = [
 const auth = { authorization: 'Bearer pg-test', 'content-type': 'application/json' };
 const chatBody = JSON.stringify({ model: 'm1', messages: [{ role: 'user', content: 'hi' }] });
 
-function setup(fetchImpl: typeof fetch, keys = ['k1', 'k2']) {
+function setup(fetchImpl: typeof fetch, keys = ['k1', 'k2'], store = new TokenStore(openDatabase(':memory:'))) {
   return createApp({
     registry,
-    tokens: ['pg-test'],
+    envTokens: ['pg-test'],
+    store,
     pools: new Map([['groq', new KeyPool(keys)]]),
     fetch: fetchImpl,
   });
@@ -98,5 +103,67 @@ describe('gateway', () => {
     expect(unknown.status).toBe(404);
     const bad = await app.request('/v1/chat/completions', { method: 'POST', headers: auth, body: '{' });
     expect(bad.status).toBe(400);
+  });
+});
+
+describe('client tokens', () => {
+  const ok = () => vi.fn(async () => Response.json({ usage: { total_tokens: 7 } })) as unknown as typeof fetch;
+  const call = (app: ReturnType<typeof setup>, token: string) =>
+    app.request('/v1/chat/completions', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: chatBody,
+    });
+
+  it('accepts a created token, rejects it after revoke, and never stores plaintext', async () => {
+    const db = openDatabase(':memory:');
+    const store = new TokenStore(db);
+    const { token, record } = store.create({ name: 'laptop' });
+    const app = setup(ok(), ['k1'], store);
+    expect((await call(app, token)).status).toBe(200);
+    const stored = db.prepare('SELECT token_hash FROM api_tokens').get() as { token_hash: string };
+    expect(stored.token_hash).not.toContain(token);
+    store.revoke(record.id);
+    expect((await call(app, token)).status).toBe(401);
+  });
+
+  it('rejects expired tokens', async () => {
+    let now = 1_000;
+    const store = new TokenStore(openDatabase(':memory:'), () => now);
+    const { token } = store.create({ name: 'tmp', expiresAt: 2_000 });
+    expect(store.verify(token)).toBeDefined();
+    now = 2_000;
+    expect(store.verify(token)).toBeUndefined();
+  });
+
+  it('enforces the daily request quota and records usage', async () => {
+    const store = new TokenStore(openDatabase(':memory:'));
+    const { token, record } = store.create({ name: 'q', dailyRequestLimit: 2 });
+    const app = setup(ok(), ['k1'], store);
+    expect((await call(app, token)).status).toBe(200);
+    expect((await call(app, token)).status).toBe(200);
+    const third = await call(app, token);
+    expect(third.status).toBe(429);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(store.usageToday(record.id)).toEqual({ requests: 2, tokens: 14 });
+  });
+
+  it('enforces the per-token rpm limit', async () => {
+    const store = new TokenStore(openDatabase(':memory:'));
+    const { token } = store.create({ name: 'r', rpmLimit: 1 });
+    const app = setup(ok(), ['k1'], store);
+    expect((await call(app, token)).status).toBe(200);
+    expect((await call(app, token)).status).toBe(429);
+  });
+
+  it('keeps usage across store instances (persistence)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pg-'));
+    const path = join(dir, 'x.db');
+    const first = new TokenStore(openDatabase(path));
+    const { record } = first.create({ name: 'p' });
+    first.recordRequest(record.id);
+    const second = new TokenStore(openDatabase(path));
+    expect(second.requestsToday(record.id)).toBe(1);
+    expect(second.list()).toHaveLength(1);
   });
 });

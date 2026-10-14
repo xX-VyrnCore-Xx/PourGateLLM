@@ -6,7 +6,7 @@ See [DESIGN.md](DESIGN.md) for the vision, architecture and roadmap.
 ## Status
 
 MVP scaffold: `GET /v1/models` and `POST /v1/chat/completions` (streaming passthrough),
-per-key rotation with cooldown and RPM limiting, failover across keys/models, and a
+per-key rotation with cooldown and RPM limiting, per-client tokens with RPM/daily quotas and usage persisted in SQLite, failover across keys/models, and a
 registry of providers in [`registry/`](registry). Providers in the registry: Groq, Gemini, Cerebras, Mistral, OpenRouter (model ids and limits are unverified except where noted).
 
 ## Quick start
@@ -23,6 +23,18 @@ curl localhost:3000/v1/chat/completions \
 ```
 
 Use `"model": "auto"` to let the gateway pick any available model, or a specific model id.
+
+## Client tokens
+
+Create per-client tokens with quotas (stored hashed in SQLite, default `data/pourgate.db`, override with `POURGATE_DB`):
+
+```bash
+pnpm --filter @pourgate/server cli tokens create --name laptop --rpm 30 --daily 500 --expires-days 90
+pnpm --filter @pourgate/server cli tokens list
+pnpm --filter @pourgate/server cli tokens revoke 1
+```
+
+`POURGATE_TOKENS` remains available as static, unlimited bootstrap tokens. Requires Node >= 22.13 (built-in `node:sqlite`).
 
 ## Development
 

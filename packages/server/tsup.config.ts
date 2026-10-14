@@ -1,8 +1,8 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: ['src/index.ts', 'src/cli.ts'],
   format: ['esm'],
-  target: 'node20',
+  target: 'node22',
   noExternal: ['@pourgate/shared'],
 });

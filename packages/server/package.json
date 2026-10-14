@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
+    "cli": "tsx src/cli.ts",
     "build": "tsup",
     "typecheck": "tsc -p .",
     "test": "vitest run"

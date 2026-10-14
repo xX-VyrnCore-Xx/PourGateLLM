@@ -1,18 +1,20 @@
 import { serve } from '@hono/node-server';
 import { resolve } from 'node:path';
 import { createApp } from './app.js';
+import { openDatabase } from './db.js';
 import { KeyPool } from './keypool.js';
 import { loadRegistry } from './registry.js';
+import { TokenStore } from './tokens.js';
 
-const registryDir = resolve(process.env.POURGATE_REGISTRY_DIR ?? 'registry');
-const registry = loadRegistry(registryDir);
+const registry = loadRegistry(resolve(process.env.POURGATE_REGISTRY_DIR ?? 'registry'));
+const store = new TokenStore(openDatabase(resolve(process.env.POURGATE_DB ?? 'data/pourgate.db')));
 
-const tokens = (process.env.POURGATE_TOKENS ?? '')
+const envTokens = (process.env.POURGATE_TOKENS ?? '')
   .split(',')
   .map((t) => t.trim())
   .filter(Boolean);
-if (tokens.length === 0) {
-  console.error('POURGATE_TOKENS is required (comma-separated client tokens).');
+if (envTokens.length === 0 && store.count() === 0) {
+  console.error('No API tokens configured. Set POURGATE_TOKENS or run: pnpm --filter @pourgate/server cli tokens create --name <name>');
   process.exit(1);
 }
 
@@ -30,6 +32,6 @@ for (const provider of registry) {
 }
 
 const port = Number(process.env.PORT ?? 3000);
-serve({ fetch: createApp({ registry, tokens, pools }).fetch, port }, (info) => {
+serve({ fetch: createApp({ registry, envTokens, store, pools }).fetch, port }, (info) => {
   console.log(`PourGateLLM listening on :${info.port} (${pools.size} provider(s) enabled)`);
 });
