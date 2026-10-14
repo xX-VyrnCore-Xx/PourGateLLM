@@ -52,6 +52,21 @@ const en = {
   testOk: 'Works',
   testFail: 'Failed',
   noDbKeys: 'No keys added here yet.',
+  analytics: 'Analytics',
+  requests: 'Requests',
+  errorRate: 'Error rate',
+  tokensUsed: 'Tokens',
+  latencyP50: 'Latency p50',
+  latencyP95: 'Latency p95',
+  model: 'Model',
+  errors: 'Errors',
+  exportJsonl: 'Export JSONL',
+  noData: 'No requests in this period.',
+  last24h: '24 hours',
+  last7d: '7 days',
+  last30d: '30 days',
+  requestsOverTime: 'Requests over time',
+  unrouted: 'unrouted (no model served)',
 } as const;
 
 export type Key = keyof typeof en;
@@ -108,6 +123,21 @@ const it: Record<Key, string> = {
   testOk: 'Funziona',
   testFail: 'Fallita',
   noDbKeys: 'Nessuna chiave aggiunta qui.',
+  analytics: 'Statistiche',
+  requests: 'Richieste',
+  errorRate: 'Tasso di errore',
+  tokensUsed: 'Token',
+  latencyP50: 'Latenza p50',
+  latencyP95: 'Latenza p95',
+  model: 'Modello',
+  errors: 'Errori',
+  exportJsonl: 'Esporta JSONL',
+  noData: 'Nessuna richiesta in questo periodo.',
+  last24h: '24 ore',
+  last7d: '7 giorni',
+  last30d: '30 giorni',
+  requestsOverTime: 'Richieste nel tempo',
+  unrouted: 'non instradate (nessun modello)',
 };
 
 const dictionaries: Record<string, Record<Key, string>> = { en, it };

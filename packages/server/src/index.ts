@@ -8,6 +8,8 @@ import { PoolManager } from './pools.js';
 import { loadRegistry } from './registry.js';
 import { RegistryManager } from './registry-sync.js';
 import { loadMasterKey } from './secrets.js';
+import { Metrics } from './metrics.js';
+import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
 import { SqliteUsage, makeFingerprint, pruneUsage } from './usage.js';
 
@@ -24,8 +26,14 @@ const poolManager = new PoolManager(keyStore, process.env, console.warn, (provid
   backend: new SqliteUsage(db, provider),
   fingerprint,
 }));
-pruneUsage(db);
-setInterval(() => pruneUsage(db), 6 * 3_600_000).unref();
+const requestLog = new RequestLog(db);
+const retentionMs = Math.max(1, Number(process.env.POURGATE_LOG_RETENTION_DAYS ?? 30)) * 86_400_000;
+const prune = () => {
+  pruneUsage(db);
+  requestLog.prune(Date.now() - retentionMs);
+};
+prune();
+setInterval(prune, 6 * 3_600_000).unref();
 
 const overridesDir = resolve(process.env.POURGATE_OVERRIDES_DIR ?? 'overrides');
 const pubKeyEnv = process.env.POURGATE_REGISTRY_PUBKEY?.trim();
@@ -66,6 +74,9 @@ serve(
       pools: poolManager.pools,
       keyStore,
       poolManager,
+      requestLog,
+      metrics: new Metrics(),
+      metricsToken: process.env.POURGATE_METRICS_TOKEN || undefined,
       adminPassword: process.env.POURGATE_ADMIN_PASSWORD || undefined,
       secureCookie: process.env.POURGATE_COOKIE_SECURE === 'true',
       staticDir: resolve(process.env.POURGATE_STATIC_DIR ?? (existsSync('public') ? 'public' : 'packages/client/dist')),

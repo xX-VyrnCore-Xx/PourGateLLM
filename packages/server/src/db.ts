@@ -51,6 +51,23 @@ const MIGRATIONS: string[] = [
      until INTEGER NOT NULL,
      PRIMARY KEY (provider, key_fp)
    );`,
+  `CREATE TABLE request_log (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     ts INTEGER NOT NULL,
+     token_id INTEGER,
+     requested TEXT NOT NULL,
+     provider TEXT,
+     model TEXT,
+     tier TEXT,
+     complexity TEXT,
+     status INTEGER NOT NULL,
+     ttfb_ms INTEGER NOT NULL,
+     total_ms INTEGER NOT NULL,
+     tokens INTEGER,
+     stream INTEGER NOT NULL,
+     error TEXT
+   );
+   CREATE INDEX idx_request_log_ts ON request_log(ts);`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

@@ -53,6 +53,7 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 | 🔁 **Smart failover** | On `429` / `5xx` / network errors it rotates to the next key, then the next model, honoring `Retry-After`. |
 | 📊 **Real quota accounting** | `rpm`, `rpd`, `tpm`, `tpd` enforced per key *and* model. Daily counters and cooldowns persist in SQLite. |
 | 🔑 **Per-client tokens** | Create tokens with their own rate limit, daily quota and expiry. Stored as SHA-256 hashes, revocable any time. |
+| 📈 **Analytics & metrics** | Request log (metadata only, never prompts), dashboard analytics (volume, errors, p50/p95 latency, tokens per model), JSONL export and a Prometheus `/metrics` endpoint. |
 | 🖥️ **Dashboard** | React + Tailwind UI in light and dark mode (English, Italian): manage tokens and provider keys, test keys, watch usage. |
 | 🗂️ **Open model registry** | YAML catalog with local overrides and optional signed, auto-syncing bundles. |
 | 🔐 **Encrypted provider keys** | AES-256-GCM in SQLite, bound to the provider; the UI only ever shows the last 4 characters. |
@@ -199,6 +200,20 @@ Responses include `x-pourgate-complexity` (for `auto`) and `x-pourgate-tier` so 
 
 Set `POURGATE_ADMIN_PASSWORD` to enable it. Sessions use an `HttpOnly`, `SameSite=Strict` cookie, login attempts are rate-limited, and cross-origin writes are rejected. Serve it over HTTPS and set `POURGATE_COOKIE_SECURE=true`.
 
+## 📈 Analytics and metrics
+
+The **Analytics** tab shows request volume and errors over time, tokens, and p50/p95 latency per model, for the last 24 hours, 7 or 30 days, with a one-click JSONL export.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/analytics-dark.png">
+  <img src="docs/screenshots/analytics-light.png" alt="Analytics tab with KPIs, requests over time and per-model latency" width="860">
+</picture>
+
+- **Privacy:** only metadata is logged (time, token id, model, provider, status, latency, tokens, complexity). Prompts and completions are never stored. Retention defaults to 30 days.
+- **Latency** is measured until the response body ends; `ttfb_ms` in the log is the time to the upstream response headers.
+- **Tokens** come from the provider's `usage` on non-streaming responses.
+- **Prometheus:** set `POURGATE_METRICS_TOKEN` and scrape `GET /metrics` with `Authorization: Bearer <token>` (`pourgate_requests_total`, `pourgate_request_duration_seconds`, `pourgate_tokens_total`, `pourgate_keys`, `pourgate_keys_cooling`).
+
 ## ⚙️ Configuration
 
 All configuration is through environment variables (see [`.env.example`](.env.example)).
@@ -212,6 +227,8 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_MASTER_KEY` | auto | 32-byte key (hex or base64) encrypting dashboard-stored keys. Generate with `openssl rand -hex 32`. If unset, `data/master.key` is created on first start. |
 | `POURGATE_DB` | `data/pourgate.db` | SQLite database path. |
 | `PORT` | `3000` | HTTP port. |
+| `POURGATE_METRICS_TOKEN` | | Enables `GET /metrics` (Prometheus), protected by this bearer token. |
+| `POURGATE_LOG_RETENTION_DAYS` | `30` | How long request metadata is kept. |
 | `POURGATE_REGISTRY_DIR` | `registry` | Directory with the shipped provider YAML files. |
 | `POURGATE_OVERRIDES_DIR` | `overrides` | Local YAML files that override or extend the registry. |
 | `POURGATE_REGISTRY_URL` | | Bundle URL to sync the registry from. |
@@ -299,7 +316,8 @@ Found a vulnerability? Please open a private security advisory on GitHub rather 
 - [ ] Periodic evals to rank models on real quality, latency and reliability
 - [x] Routing by prompt complexity (heuristic classifier)
 - [ ] Semantic and prompt caching
-- [ ] OpenTelemetry metrics and log export
+- [x] Request analytics, JSONL export and Prometheus metrics
+- [ ] OpenTelemetry (OTLP) tracing
 - [ ] PII redaction and per-provider privacy policies
 - [ ] Plugin system for providers, strategies and middleware
 - [ ] Anthropic Messages, embeddings, images and audio endpoints
