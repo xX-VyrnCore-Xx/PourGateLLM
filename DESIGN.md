@@ -8,7 +8,7 @@
 | Area | Scelta |
 |---|---|
 | Obiettivo | Gateway free-tier personale / piccolo team |
-| Stack | TypeScript (Node 20+ / Bun), monorepo pnpm |
+| Stack | TypeScript, Node 20+ con Hono, monorepo pnpm |
 | Storage | SQLite (Drizzle ORM + migrazioni) |
 | Dashboard | React + Vite + Tailwind + shadcn/ui |
 | Distribuzione | Docker/Compose, app desktop, CLI (`npx pourgate`) |
@@ -36,7 +36,7 @@
 Client (OpenAI SDK, curl, agenti)
         │  Bearer pg-xxxx
         ▼
-┌─────────────────────────── Gateway (Fastify/Hono) ───────────────────────────┐
+┌─────────────────────────── Gateway (Hono) ───────────────────────────┐
 │ Auth & quote → Middleware (PII, cache) → Router → Provider adapters          │
 │                                            │            │                    │
 │                                   Scoring/Eval     Key pool + limiter        │
@@ -120,4 +120,4 @@ models:
 - **ToS dei provider**: la rotazione di molte chiavi/account può violare i termini. Il progetto deve dichiarare uso personale e rispetto dei limiti per chiave, senza incentivare multi-account abusivi.
 - **Qualità dei dati del registry**: serve un processo di verifica (CI + probing) per evitare dati obsoleti.
 - **Costo delle eval**: consumano quota gratuita; vanno limitate e schedulate a basso traffico.
-- **Da decidere**: nome/brand definitivo, lingua della UI, lista provider prioritari, runtime (Node vs Bun), framework HTTP (Fastify vs Hono).
+- **Decisi in seguito**: nome PourGateLLM; runtime Node 20+ con Hono; provider MVP: Groq, Google Gemini, Cerebras, Mistral, OpenRouter; UI e documentazione in inglese con i18n pronta (italiano come traduzione).
