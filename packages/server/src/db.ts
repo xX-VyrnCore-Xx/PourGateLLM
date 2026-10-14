@@ -27,6 +27,15 @@ const MIGRATIONS: string[] = [
      tokens INTEGER NOT NULL DEFAULT 0,
      PRIMARY KEY (token_id, day)
    );`,
+  `CREATE TABLE provider_keys (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     provider TEXT NOT NULL,
+     label TEXT NOT NULL,
+     last4 TEXT NOT NULL,
+     ciphertext TEXT NOT NULL,
+     created_at INTEGER NOT NULL
+   );
+   CREATE INDEX idx_provider_keys_provider ON provider_keys(provider);`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

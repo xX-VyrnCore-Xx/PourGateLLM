@@ -12,11 +12,24 @@ export class KeyPool {
   private cursor = 0;
   private readonly now: () => number;
 
-  constructor(
-    readonly keys: readonly string[],
-    opts: KeyPoolOptions = {},
-  ) {
+  private _keys: readonly string[];
+
+  constructor(keys: readonly string[], opts: KeyPoolOptions = {}) {
+    this._keys = keys;
     this.now = opts.now ?? Date.now;
+  }
+
+  get keys(): readonly string[] {
+    return this._keys;
+  }
+
+  /** Replaces the key set, keeping cooldown/usage state of keys that remain. */
+  setKeys(keys: readonly string[]): void {
+    const keep = new Set(keys);
+    for (const k of [...this.cooldownUntil.keys()]) if (!keep.has(k)) this.cooldownUntil.delete(k);
+    for (const k of [...this.hits.keys()]) if (!keep.has(k)) this.hits.delete(k);
+    this._keys = keys;
+    this.cursor = keys.length === 0 ? 0 : this.cursor % keys.length;
   }
 
   /** Returns the next usable key, or undefined if all are cooling down / over the rpm limit. */

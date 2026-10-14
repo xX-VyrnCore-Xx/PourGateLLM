@@ -41,6 +41,16 @@ const en = {
   lastSync: 'Last sync',
   never: 'never',
   noRegistryUrl: 'Sync disabled: set POURGATE_REGISTRY_URL',
+  apiKeys: 'API keys',
+  fromEnv: 'from environment',
+  keyLabel: 'Label (optional)',
+  keyValue: 'API key',
+  addKey: 'Add key',
+  test: 'Test',
+  remove: 'Remove',
+  testOk: 'Works',
+  testFail: 'Failed',
+  noDbKeys: 'No keys added here yet.',
 } as const;
 
 export type Key = keyof typeof en;
@@ -86,6 +96,16 @@ const it: Record<Key, string> = {
   lastSync: 'Ultimo sync',
   never: 'mai',
   noRegistryUrl: 'Sync disattivato: imposta POURGATE_REGISTRY_URL',
+  apiKeys: 'Chiavi API',
+  fromEnv: "dall'ambiente",
+  keyLabel: 'Etichetta (facoltativa)',
+  keyValue: 'Chiave API',
+  addKey: 'Aggiungi chiave',
+  test: 'Prova',
+  remove: 'Rimuovi',
+  testOk: 'Funziona',
+  testFail: 'Fallita',
+  noDbKeys: 'Nessuna chiave aggiunta qui.',
 };
 
 const dictionaries: Record<string, Record<Key, string>> = { en, it };

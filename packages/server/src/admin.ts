@@ -3,7 +3,9 @@ import { Hono } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { ProviderEntry } from '@pourgate/shared';
+import { KeyStoreError, type KeyStore } from './keys.js';
 import type { KeyPool } from './keypool.js';
+import type { PoolManager } from './pools.js';
 import { SlidingWindow } from './ratelimit.js';
 import type { SyncStatus } from './registry-sync.js';
 import type { TokenStore } from './tokens.js';
@@ -18,6 +20,10 @@ export interface AdminOptions {
   store: TokenStore;
   registry: () => ProviderEntry[];
   registrySync?: RegistrySyncHandle;
+  /** Dashboard-managed provider keys (encrypted). Routes are disabled when unset. */
+  keyStore?: KeyStore;
+  poolManager?: PoolManager;
+  fetch?: typeof fetch;
   pools: Map<string, KeyPool>;
   /** Set the Secure cookie flag (use when served over HTTPS). */
   secureCookie?: boolean;
@@ -148,6 +154,61 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     return c.json(await opts.registrySync.sync());
   });
 
+  const providerByName = (name: string) => opts.registry().find((p) => p.provider === name);
+  const keyAdminReady = () => opts.keyStore !== undefined && opts.poolManager !== undefined;
+
+  app.get('/providers/:name/keys', (c) => {
+    const entry = providerByName(c.req.param('name'));
+    if (!entry) return c.json({ error: 'unknown provider' }, 404);
+    if (!keyAdminReady()) return c.json({ error: 'key management is not configured' }, 404);
+    return c.json({ env: opts.poolManager!.envKeys(entry).length, keys: opts.keyStore!.list(entry.provider) });
+  });
+
+  app.post('/providers/:name/keys', async (c) => {
+    const entry = providerByName(c.req.param('name'));
+    if (!entry) return c.json({ error: 'unknown provider' }, 404);
+    if (!keyAdminReady()) return c.json({ error: 'key management is not configured' }, 404);
+    const b = (await c.req.json().catch(() => null)) as { key?: unknown; label?: unknown } | null;
+    if (typeof b?.key !== 'string') return c.json({ error: "'key' is required" }, 400);
+    try {
+      const record = opts.keyStore!.add(entry.provider, b.key, typeof b.label === 'string' ? b.label : undefined);
+      opts.poolManager!.refresh();
+      return c.json(record, 201);
+    } catch (err) {
+      if (err instanceof KeyStoreError) return c.json({ error: err.message }, 400);
+      throw err;
+    }
+  });
+
+  app.delete('/provider-keys/:id', (c) => {
+    if (!keyAdminReady()) return c.json({ error: 'key management is not configured' }, 404);
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) return c.json({ error: 'invalid id' }, 400);
+    if (!opts.keyStore!.remove(id)) return c.json({ error: 'not found' }, 404);
+    opts.poolManager!.refresh();
+    return c.body(null, 204);
+  });
+
+  // Cheap liveness check: GET {base_url}/models with the key. Only the HTTP status is reported back.
+  const testLimiter = new SlidingWindow(60_000, now);
+  app.post('/provider-keys/:id/test', async (c) => {
+    if (!keyAdminReady()) return c.json({ error: 'key management is not configured' }, 404);
+    if (!testLimiter.take('test', 20)) return c.json({ error: 'too many tests' }, 429);
+    const secret = opts.keyStore!.secretById(Number(c.req.param('id')));
+    const entry = secret && providerByName(secret.provider);
+    if (!secret || !entry) return c.json({ error: 'not found' }, 404);
+    try {
+      const res = await (opts.fetch ?? fetch)(`${entry.base_url.replace(/\/$/, '')}/models`, {
+        headers: { authorization: `Bearer ${secret.key}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      await res.body?.cancel();
+      return c.json({ ok: res.ok, status: res.status });
+    } catch {
+      return c.json({ ok: false, status: null });
+    }
+  });
+
   app.get('/providers', (c) =>
     c.json(
       opts.registry().map((p) => {
@@ -156,6 +217,7 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
           provider: p.provider,
           enabled: pool !== undefined,
           keys: pool?.keys.length ?? 0,
+          keysFromEnv: opts.poolManager?.envKeys(p).length ?? null,
           keysCooling: pool?.coolingCount() ?? 0,
           trainsOnPrompts: p.trains_on_prompts ?? null,
           models: p.models.map((m) => ({

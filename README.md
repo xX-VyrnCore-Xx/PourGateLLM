@@ -31,6 +31,17 @@ In development run `pnpm dev` (API on :3000) and `pnpm --filter @pourgate/client
 Outside Docker, point the server at the built UI with `POURGATE_STATIC_DIR=packages/client/dist`.
 Serve it behind HTTPS in production and set `POURGATE_COOKIE_SECURE=true`.
 
+## Provider keys
+
+Keys can come from environment variables (`GROQ_API_KEYS=k1,k2`) and/or be added in the dashboard (Providers tab: add, test, remove).
+Dashboard keys are stored in SQLite encrypted with AES-256-GCM (bound to the provider name); the dashboard only ever shows the last 4 characters.
+The master key comes from `POURGATE_MASTER_KEY` (64 hex chars or base64 of 32 bytes; generate with `openssl rand -hex 32`),
+or, if unset, from `data/master.key`, created on first start with mode 0600.
+
+- Back the master key up: without it stored keys cannot be decrypted (they are skipped with a warning, never crash the server).
+- Keeping the key file in the same volume as the database only protects against leaks of the database file alone; set `POURGATE_MASTER_KEY` to keep them apart.
+- "Test" calls `GET {base_url}/models` with the key and reports only the HTTP status.
+
 ## Registry sync
 
 The provider/model catalog in [`registry/`](registry) is open (PRs welcome). A gateway can follow a published bundle:

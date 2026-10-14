@@ -92,7 +92,7 @@ models:
 
 ## 6. Sicurezza e multi-utente
 
-- Chiavi provider cifrate (AES-256-GCM, chiave master da env o keyfile), mai loggate.
+- Chiavi provider cifrate (AES-256-GCM con AAD = nome provider, chiave master da `POURGATE_MASTER_KEY` o keyfile 0600 generato al primo avvio), gestite dalla dashboard o da variabili d'ambiente, mai loggate né restituite dall'API.
 - Utenti admin con login (password + opzione passkey), sessioni sicure.
 - Token API per client: scope, rate-limit, budget token/giorno, scadenza, revoca.
 - Audit log di accessi e modifiche; log delle richieste con redazione configurabile.

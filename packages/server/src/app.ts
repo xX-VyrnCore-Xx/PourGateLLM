@@ -5,7 +5,9 @@ import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import type { ProviderEntry } from '@pourgate/shared';
 import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
+import type { KeyStore } from './keys.js';
 import { KeyPool } from './keypool.js';
+import type { PoolManager } from './pools.js';
 import { SlidingWindow } from './ratelimit.js';
 import { AUTO_MODEL, errorResponse, routeChat } from './router.js';
 import type { TokenRecord, TokenStore } from './tokens.js';
@@ -19,6 +21,8 @@ export interface AppOptions {
   envTokens?: string[];
   store: TokenStore;
   pools: Map<string, KeyPool>;
+  keyStore?: KeyStore;
+  poolManager?: PoolManager;
   fetch?: typeof fetch;
   /** Enables the admin API when set. */
   adminPassword?: string;
@@ -135,6 +139,9 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         registry: getRegistry,
         registrySync: opts.registrySync,
         pools: opts.pools,
+        keyStore: opts.keyStore,
+        poolManager: opts.poolManager,
+        fetch: opts.fetch,
         secureCookie: opts.secureCookie,
       }),
     );

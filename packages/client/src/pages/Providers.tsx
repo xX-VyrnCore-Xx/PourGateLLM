@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ProviderKeys } from '../components/ProviderKeys';
 import { Button } from '../components/ui/button';
 import { Badge, Card } from '../components/ui/card';
 import { ApiError, api, type ProviderRow, type RegistryStatus } from '../lib/api';
@@ -84,6 +85,7 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
               </li>
             ))}
           </ul>
+          <ProviderKeys provider={p.provider} onChanged={load} onUnauthorized={onUnauthorized} />
         </Card>
       ))}
     </div>
