@@ -4,8 +4,10 @@ base_url: https://api.mistral.ai/v1
 api_key_env: MISTRAL_API_KEYS
 models:
   - id: mistral-small-latest
+    tier: medium
     family: mistral-small
     capabilities: [chat, tools, json_mode]
   - id: open-mistral-nemo
+    tier: small
     family: mistral-nemo
     capabilities: [chat, tools, json_mode]

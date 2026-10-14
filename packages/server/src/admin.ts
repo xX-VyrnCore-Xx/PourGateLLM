@@ -222,6 +222,7 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
           trainsOnPrompts: p.trains_on_prompts ?? null,
           models: p.models.map((m) => ({
             id: m.id,
+            tier: m.tier ?? null,
             capabilities: m.capabilities,
             context: m.context ?? null,
             limits: m.limits,

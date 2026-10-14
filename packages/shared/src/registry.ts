@@ -9,6 +9,9 @@ export const limitsSchema = z
   })
   .strict();
 
+/** Rough capability class used by complexity routing: small = fast/cheap, large = strongest available. */
+export const tierSchema = z.enum(['small', 'medium', 'large']);
+
 export const capabilitySchema = z.enum(['chat', 'tools', 'json_mode', 'vision']);
 
 export const modelSchema = z
@@ -16,6 +19,7 @@ export const modelSchema = z
     id: z.string().min(1),
     family: z.string().optional(),
     capabilities: z.array(capabilitySchema).default(['chat']),
+    tier: tierSchema.optional(),
     context: z.number().int().positive().optional(),
     limits: limitsSchema.default({}),
     quirks: z.array(z.string()).default([]),
@@ -38,6 +42,7 @@ export const providerSchema = z
   .strict();
 
 export type Limits = z.infer<typeof limitsSchema>;
+export type Tier = z.infer<typeof tierSchema>;
 export type Capability = z.infer<typeof capabilitySchema>;
 export type ModelEntry = z.infer<typeof modelSchema>;
 export type ProviderEntry = z.infer<typeof providerSchema>;
