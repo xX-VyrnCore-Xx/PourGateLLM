@@ -9,6 +9,7 @@ import { loadRegistry } from './registry.js';
 import { RegistryManager } from './registry-sync.js';
 import { loadMasterKey } from './secrets.js';
 import { ResponseCache, parseCacheMode } from './cache.js';
+import { EvalRunner, EvalStore, loadSuite, parseStrategy, type ModelScore } from './evals.js';
 import { Metrics } from './metrics.js';
 import { parsePiiMode, parsePolicy } from './privacy.js';
 import { RequestLog } from './requestlog.js';
@@ -52,8 +53,10 @@ if (cacheTtl > 0) {
   }
 }
 const retentionMs = Math.max(1, Number(process.env.POURGATE_LOG_RETENTION_DAYS ?? 30)) * 86_400_000;
+const evalStore = new EvalStore(db);
 const prune = () => {
   pruneUsage(db);
+  evalStore.prune(Date.now() - 30 * 86_400_000);
   requestLog.prune(Date.now() - retentionMs);
 };
 prune();
@@ -83,6 +86,39 @@ if (envTokens.length === 0 && store.count() === 0) {
 manager.loadCache();
 poolManager.sync(manager.entries);
 
+// Measured quality (evals) and the routing strategy that uses it.
+let strategy;
+try {
+  strategy = parseStrategy(process.env.POURGATE_ROUTING_STRATEGY);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+}
+let scoreMap = new Map<string, ModelScore>();
+let scoresAt = 0;
+const scoring = {
+  strategy,
+  score: (provider: string, model: string) => {
+    if (Date.now() - scoresAt > 60_000) {
+      scoreMap = new Map(evalStore.scores().map((s) => [`${s.provider}|${s.model}`, s]));
+      scoresAt = Date.now();
+    }
+    return scoreMap.get(`${provider}|${model}`);
+  },
+};
+const suitePath = resolve(process.env.POURGATE_EVALS_FILE ?? 'evals/suite.json');
+const evalTasksPerModel = Math.max(1, Number(process.env.POURGATE_EVAL_TASKS ?? 4));
+let evals;
+if (existsSync(suitePath)) {
+  const suite = loadSuite(suitePath);
+  const runner = new EvalRunner({ suite, store: evalStore, registry: () => manager.entries, pools: () => poolManager.pools });
+  evals = { runner, store: evalStore, strategy, tasksPerModel: evalTasksPerModel, tasks: suite.length };
+  const hours = Number(process.env.POURGATE_EVAL_HOURS ?? 0);
+  if (hours > 0) runner.start(hours * 3_600_000, { tasksPerModel: evalTasksPerModel });
+} else {
+  console.warn(`[evals] suite not found at ${suitePath}: evals disabled`);
+}
+
 if (!process.env.POURGATE_ADMIN_PASSWORD) {
   console.warn('POURGATE_ADMIN_PASSWORD not set: dashboard/admin API disabled (use the CLI to manage tokens)');
 }
@@ -99,6 +135,8 @@ serve(
       keyStore,
       poolManager,
       privacy,
+      scoring,
+      evals,
       cache,
       requestLog,
       metrics: new Metrics(),

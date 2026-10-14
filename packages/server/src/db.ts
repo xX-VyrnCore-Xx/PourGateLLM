@@ -83,6 +83,17 @@ const MIGRATIONS: string[] = [
      size INTEGER NOT NULL
    );
    CREATE INDEX idx_response_cache_created ON response_cache(created_at);`,
+  `CREATE TABLE eval_results (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     ts INTEGER NOT NULL,
+     provider TEXT NOT NULL,
+     model TEXT NOT NULL,
+     task_id TEXT NOT NULL,
+     passed INTEGER NOT NULL,
+     latency_ms INTEGER NOT NULL,
+     error TEXT
+   );
+   CREATE INDEX idx_eval_results_ts ON eval_results(ts);`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

@@ -72,6 +72,14 @@ const en = {
   cacheEntries: 'entries',
   cacheStoredHits: 'hits served',
   clearCache: 'Clear cache',
+  modelQuality: 'Model quality',
+  runEvals: 'Run evals',
+  evalRunning: 'Running…',
+  strategy: 'Strategy',
+  quality: 'Quality',
+  reliability: 'Reliability',
+  samples: 'Samples',
+  noScores: 'No eval results yet. Run evals to measure your models.',
 } as const;
 
 export type Key = keyof typeof en;
@@ -148,6 +156,14 @@ const it: Record<Key, string> = {
   cacheEntries: 'voci',
   cacheStoredHits: 'risposte servite',
   clearCache: 'Svuota cache',
+  modelQuality: 'Qualità dei modelli',
+  runEvals: 'Avvia eval',
+  evalRunning: 'In corso…',
+  strategy: 'Strategia',
+  quality: 'Qualità',
+  reliability: 'Affidabilità',
+  samples: 'Campioni',
+  noScores: 'Nessun risultato ancora. Avvia le eval per misurare i modelli.',
 };
 
 const dictionaries: Record<string, Record<Key, string>> = { en, it };

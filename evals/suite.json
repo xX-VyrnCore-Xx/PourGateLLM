@@ -1,0 +1,251 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "math-mul",
+      "category": "math",
+      "prompt": "What is 17 * 23? Answer with just the number.",
+      "check": {
+        "type": "regex",
+        "value": "\\b391\\b"
+      }
+    },
+    {
+      "id": "math-expr",
+      "category": "math",
+      "prompt": "Compute 144 / 12 + 8. Answer with just the number.",
+      "check": {
+        "type": "regex",
+        "value": "\\b20\\b"
+      }
+    },
+    {
+      "id": "math-word",
+      "category": "math",
+      "prompt": "A train travels at 60 km/h for 2.5 hours. How many kilometres does it travel? Answer with just the number.",
+      "check": {
+        "type": "regex",
+        "value": "\\b150\\b"
+      }
+    },
+    {
+      "id": "fact-capital",
+      "category": "knowledge",
+      "prompt": "What is the capital of Australia? Answer with one word.",
+      "check": {
+        "type": "includes",
+        "value": [
+          "canberra"
+        ]
+      }
+    },
+    {
+      "id": "fact-gold",
+      "category": "knowledge",
+      "prompt": "What is the chemical symbol for gold? Answer with just the symbol.",
+      "check": {
+        "type": "equals",
+        "value": "Au"
+      }
+    },
+    {
+      "id": "fact-author",
+      "category": "knowledge",
+      "prompt": "Who wrote the novel 'Pride and Prejudice'? Answer with just the surname.",
+      "check": {
+        "type": "includes",
+        "value": [
+          "austen"
+        ]
+      }
+    },
+    {
+      "id": "fact-planet",
+      "category": "knowledge",
+      "prompt": "Which is the largest planet in our solar system? One word.",
+      "check": {
+        "type": "includes",
+        "value": [
+          "jupiter"
+        ]
+      }
+    },
+    {
+      "id": "logic-syllogism",
+      "category": "reasoning",
+      "prompt": "If all bloops are razzies and all razzies are lazzies, are all bloops definitely lazzies? Answer yes or no.",
+      "check": {
+        "type": "regex",
+        "value": "^\\W*yes\\b"
+      }
+    },
+    {
+      "id": "logic-order",
+      "category": "reasoning",
+      "prompt": "Tom is taller than Sam. Sam is taller than Lee. Who is the shortest? One word.",
+      "check": {
+        "type": "includes",
+        "value": [
+          "lee"
+        ]
+      }
+    },
+    {
+      "id": "logic-sequence",
+      "category": "reasoning",
+      "prompt": "What number comes next in the sequence 2, 4, 8, 16? Answer with just the number.",
+      "check": {
+        "type": "regex",
+        "value": "\\b32\\b"
+      }
+    },
+    {
+      "id": "format-pong",
+      "category": "instruction",
+      "prompt": "Reply with exactly the word PONG and nothing else.",
+      "check": {
+        "type": "equals",
+        "value": "PONG",
+        "caseSensitive": true
+      }
+    },
+    {
+      "id": "format-colors",
+      "category": "instruction",
+      "prompt": "List three primary colours of light or paint as a comma-separated lowercase list with no other text.",
+      "check": {
+        "type": "includesAll",
+        "value": [
+          "red",
+          "blue"
+        ]
+      }
+    },
+    {
+      "id": "format-upper",
+      "category": "instruction",
+      "prompt": "Write the word 'hello' in uppercase letters and nothing else.",
+      "check": {
+        "type": "equals",
+        "value": "HELLO",
+        "caseSensitive": true
+      }
+    },
+    {
+      "id": "json-object",
+      "category": "structured",
+      "prompt": "Return only a JSON object with the key \"name\" set to the string \"Ada\" and the key \"age\" set to the number 36. No explanation.",
+      "check": {
+        "type": "json",
+        "value": {
+          "name": "Ada",
+          "age": 36
+        }
+      }
+    },
+    {
+      "id": "json-sum",
+      "category": "structured",
+      "prompt": "Return only a JSON object {\"sum\": X} where X is the sum of 12 and 30. No explanation.",
+      "check": {
+        "type": "json",
+        "value": {
+          "sum": 42
+        }
+      }
+    },
+    {
+      "id": "code-len",
+      "category": "code",
+      "prompt": "In Python, what does len([1, 2, 3, 4]) return? Answer with just the number.",
+      "check": {
+        "type": "regex",
+        "value": "\\b4\\b"
+      }
+    },
+    {
+      "id": "code-js",
+      "category": "code",
+      "prompt": "What does this JavaScript print? console.log(2 + '2')  Answer with just the output.",
+      "check": {
+        "type": "regex",
+        "value": "\\b22\\b"
+      }
+    },
+    {
+      "id": "code-reverse",
+      "category": "code",
+      "prompt": "Write a Python expression (not a statement, no print) that reverses the string s. Answer with just the expression.",
+      "check": {
+        "type": "includes",
+        "value": [
+          "[::-1]",
+          "reversed(s)"
+        ]
+      }
+    },
+    {
+      "id": "it-translate",
+      "category": "italian",
+      "prompt": "Traduci in inglese: 'Buongiorno, come stai?' Rispondi solo con la traduzione.",
+      "check": {
+        "type": "includesAll",
+        "value": [
+          "good morning",
+          "how are you"
+        ]
+      }
+    },
+    {
+      "id": "it-capital",
+      "category": "italian",
+      "prompt": "Qual è la capitale d'Italia? Rispondi con una sola parola.",
+      "check": {
+        "type": "includes",
+        "value": [
+          "roma"
+        ]
+      }
+    },
+    {
+      "id": "it-math",
+      "category": "italian",
+      "prompt": "Quanto fa 9 per 8? Rispondi solo con il numero.",
+      "check": {
+        "type": "regex",
+        "value": "\\b72\\b"
+      }
+    },
+    {
+      "id": "inst-opposite",
+      "category": "instruction",
+      "prompt": "Answer with a single word: what is the opposite of 'hot'?",
+      "check": {
+        "type": "includes",
+        "value": [
+          "cold"
+        ]
+      }
+    },
+    {
+      "id": "inst-count",
+      "category": "reasoning",
+      "prompt": "How many letters are in the word 'banana'? Answer with just the number.",
+      "check": {
+        "type": "regex",
+        "value": "\\b6\\b"
+      }
+    },
+    {
+      "id": "inst-month",
+      "category": "knowledge",
+      "prompt": "Which month comes right after March? One word.",
+      "check": {
+        "type": "includes",
+        "value": [
+          "april"
+        ]
+      }
+    }
+  ]
+}

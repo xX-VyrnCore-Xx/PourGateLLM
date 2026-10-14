@@ -5,6 +5,7 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 import type { ProviderEntry } from '@pourgate/shared';
 import { KeyStoreError, type KeyStore } from './keys.js';
 import type { ResponseCache } from './cache.js';
+import type { EvalRunner, EvalStore, Strategy } from './evals.js';
 import type { KeyPool } from './keypool.js';
 import type { PoolManager } from './pools.js';
 import type { RequestLog } from './requestlog.js';
@@ -27,6 +28,7 @@ export interface AdminOptions {
   poolManager?: PoolManager;
   requestLog?: RequestLog;
   cache?: ResponseCache;
+  evals?: { runner: EvalRunner; store: EvalStore; strategy: Strategy; tasksPerModel: number; tasks: number };
   fetch?: typeof fetch;
   pools: Map<string, KeyPool>;
   /** Set the Secure cookie flag (use when served over HTTPS). */
@@ -169,6 +171,31 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     const range = RANGES[c.req.query('range') ?? '24h'];
     if (!range) return c.json({ error: "range must be one of 24h, 7d, 30d" }, 400);
     return c.json(opts.requestLog.analytics(now() - range.ms, range.bucketMs));
+  });
+
+  const evalLimiter = new SlidingWindow(60_000, now);
+  app.get('/evals', (c) => {
+    const e = opts.evals;
+    if (!e) return c.json({ enabled: false });
+    return c.json({
+      enabled: true,
+      strategy: e.strategy,
+      tasks: e.tasks,
+      tasksPerModel: e.tasksPerModel,
+      running: e.runner.running,
+      lastRun: e.runner.lastRun,
+      scores: e.store.scores(),
+    });
+  });
+  app.post('/evals/run', async (c) => {
+    const e = opts.evals;
+    if (!e) return c.json({ error: 'evals are not enabled' }, 404);
+    if (e.runner.running) return c.json({ error: 'an eval run is already in progress' }, 409);
+    if (!evalLimiter.take('run', 3)) return c.json({ error: 'too many requests' }, 429);
+    const body = (await c.req.json().catch(() => ({}))) as { models?: unknown };
+    const models = Array.isArray(body?.models) && body.models.every((m) => typeof m === 'string') ? (body.models as string[]) : undefined;
+    void e.runner.run({ tasksPerModel: e.tasksPerModel, models }).catch((err) => console.error('[evals]', err instanceof Error ? err.message : err));
+    return c.json({ started: true }, 202);
   });
 
   app.get('/cache', (c) => c.json(opts.cache ? { enabled: true, mode: opts.cache.mode, ...opts.cache.stats() } : { enabled: false }));

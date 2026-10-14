@@ -7,6 +7,7 @@ import type { ProviderEntry } from '@pourgate/shared';
 import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
 import type { KeyStore } from './keys.js';
 import type { ResponseCache } from './cache.js';
+import type { EvalRunner, EvalStore, Strategy } from './evals.js';
 import type { Metrics } from './metrics.js';
 import { DEFAULT_PRIVACY, tighten, type PrivacyConfig } from './privacy.js';
 import { observeResponse } from './observe.js';
@@ -14,7 +15,7 @@ import type { RequestLog } from './requestlog.js';
 import { KeyPool } from './keypool.js';
 import type { PoolManager } from './pools.js';
 import { SlidingWindow } from './ratelimit.js';
-import { VIRTUAL_MODELS, errorResponse, routeChat } from './router.js';
+import { VIRTUAL_MODELS, errorResponse, routeChat, type Scoring } from './router.js';
 import type { TokenRecord, TokenStore } from './tokens.js';
 
 export interface AppOptions {
@@ -34,6 +35,10 @@ export interface AppOptions {
   secureCookie?: boolean;
   /** Operator privacy settings: PII masking mode and provider policy. */
   privacy?: PrivacyConfig;
+  /** Measured-quality ordering inside a tier (see evals). */
+  scoring?: Scoring;
+  /** Eval runner/store, exposed through the admin API. */
+  evals?: { runner: EvalRunner; store: EvalStore; strategy: Strategy; tasksPerModel: number; tasks: number };
   /** Exact-match response cache; disabled when unset. */
   cache?: ResponseCache;
   /** Request metadata log (SQLite); enables analytics in the admin API. */
@@ -206,7 +211,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     }
 
     const routed = await routeChat(
-      { registry: getRegistry(), pools: opts.pools, fetch: doFetch, privacy },
+      { registry: getRegistry(), pools: opts.pools, fetch: doFetch, privacy, scoring: opts.scoring },
       payload,
       payload.model,
       c.req.raw.signal,
@@ -260,6 +265,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         poolManager: opts.poolManager,
         requestLog: opts.requestLog,
         cache: opts.cache,
+        evals: opts.evals,
         fetch: opts.fetch,
         secureCookie: opts.secureCookie,
       }),

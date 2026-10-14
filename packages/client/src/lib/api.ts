@@ -75,6 +75,16 @@ export interface Analytics {
   series: { t: number; requests: number; errors: number }[];
 }
 
+export interface EvalInfo {
+  enabled: boolean;
+  strategy?: string;
+  tasks?: number;
+  tasksPerModel?: number;
+  running?: boolean;
+  lastRun?: { startedAt: number; finishedAt: number; models: number; attempts: number; skipped: string[] } | null;
+  scores?: { provider: string; model: string; samples: number; quality: number; reliability: number; p50Ms: number | null; lastRun: number }[];
+}
+
 export const api = {
   session: () => request<{ authenticated: boolean }>('/session'),
   login: (password: string) => request<void>('/login', { method: 'POST', body: JSON.stringify({ password }) }),
@@ -94,6 +104,8 @@ export const api = {
   removeProviderKey: (id: number) => request<void>(`/provider-keys/${id}`, { method: 'DELETE' }),
   testProviderKey: (id: number) =>
     request<{ ok: boolean; status: number | null }>(`/provider-keys/${id}/test`, { method: 'POST' }),
+  evals: () => request<EvalInfo>('/evals'),
+  runEvals: () => request<{ started: boolean }>('/evals/run', { method: 'POST', body: '{}' }),
   cache: () => request<{ enabled: boolean; mode?: string; entries?: number; hits?: number; bytes?: number }>('/cache'),
   clearCache: () => request<{ cleared: number }>('/cache', { method: 'DELETE' }),
   analytics: (range: string) => request<Analytics>(`/analytics?range=${encodeURIComponent(range)}`),
