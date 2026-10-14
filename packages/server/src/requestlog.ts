@@ -15,6 +15,8 @@ export interface LogEntry {
   /** Time until the response body finished (or the client went away). */
   totalMs: number;
   tokens: number | null;
+  /** Number of PII items masked before forwarding; null when masking was not applied. */
+  redacted: number | null;
   stream: boolean;
   error: string | null;
 }
@@ -32,6 +34,7 @@ interface Row {
   ttfb_ms: number;
   total_ms: number;
   tokens: number | null;
+  redacted: number | null;
   stream: number;
   error: string | null;
 }
@@ -71,6 +74,7 @@ const toEntry = (r: Row): LogEntry => ({
   ttfbMs: r.ttfb_ms,
   totalMs: r.total_ms,
   tokens: r.tokens,
+  redacted: r.redacted,
   stream: r.stream === 1,
   error: r.error,
 });
@@ -81,10 +85,10 @@ export class RequestLog {
   insert(e: LogEntry): void {
     this.db
       .prepare(
-        `INSERT INTO request_log (ts, token_id, requested, provider, model, tier, complexity, status, ttfb_ms, total_ms, tokens, stream, error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO request_log (ts, token_id, requested, provider, model, tier, complexity, status, ttfb_ms, total_ms, tokens, redacted, stream, error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(e.ts, e.tokenId, e.requested.slice(0, 200), e.provider, e.model, e.tier, e.complexity, e.status, Math.round(e.ttfbMs), Math.round(e.totalMs), e.tokens, e.stream ? 1 : 0, e.error);
+      .run(e.ts, e.tokenId, e.requested.slice(0, 200), e.provider, e.model, e.tier, e.complexity, e.status, Math.round(e.ttfbMs), Math.round(e.totalMs), e.tokens, e.redacted, e.stream ? 1 : 0, e.error);
   }
 
   recent(limit = 100): LogEntry[] {

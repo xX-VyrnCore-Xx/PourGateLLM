@@ -9,9 +9,18 @@ import { loadRegistry } from './registry.js';
 import { RegistryManager } from './registry-sync.js';
 import { loadMasterKey } from './secrets.js';
 import { Metrics } from './metrics.js';
+import { parsePiiMode, parsePolicy } from './privacy.js';
 import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
 import { SqliteUsage, makeFingerprint, pruneUsage } from './usage.js';
+
+let privacy;
+try {
+  privacy = { pii: parsePiiMode(process.env.POURGATE_PII_MODE), policy: parsePolicy(process.env.POURGATE_PRIVACY_POLICY) };
+} catch (err) {
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+}
 
 const dbPath = resolve(process.env.POURGATE_DB ?? 'data/pourgate.db');
 const db = openDatabase(dbPath);
@@ -74,6 +83,7 @@ serve(
       pools: poolManager.pools,
       keyStore,
       poolManager,
+      privacy,
       requestLog,
       metrics: new Metrics(),
       metricsToken: process.env.POURGATE_METRICS_TOKEN || undefined,
