@@ -13,6 +13,7 @@ import { EvalRunner, EvalStore, loadSuite, parseStrategy, type ModelScore } from
 import { Metrics } from './metrics.js';
 import { parsePiiMode, parsePolicy } from './privacy.js';
 import { Tracer, parseHeaders } from './otel.js';
+import { PluginHost } from './plugins.js';
 import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
 import { SqliteUsage, makeFingerprint, pruneUsage } from './usage.js';
@@ -39,6 +40,14 @@ const poolManager = new PoolManager(keyStore, process.env, console.warn, (provid
   fingerprint,
 }));
 const requestLog = new RequestLog(db);
+let plugins: PluginHost;
+try {
+  plugins = await PluginHost.load(process.env.POURGATE_PLUGINS_DIR ?? 'plugins');
+  if (plugins.plugins.length) console.log(`[plugins] loaded: ${plugins.names.join(', ')}`);
+} catch (err) {
+  console.error(`[plugins] ${err instanceof Error ? err.message : err}`);
+  process.exit(1);
+}
 const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 const tracer = otlpEndpoint
   ? new Tracer({ endpoint: otlpEndpoint, headers: parseHeaders(process.env.OTEL_EXPORTER_OTLP_HEADERS), serviceName: process.env.OTEL_SERVICE_NAME || 'pourgatellm' })
@@ -90,6 +99,9 @@ if (envTokens.length === 0 && store.count() === 0) {
 
 manager.loadCache();
 poolManager.sync(manager.entries);
+for (const p of manager.entries) {
+  if (p.adapter && !plugins.adapters.has(p.adapter)) console.warn(`[plugins] provider ${p.provider} needs adapter "${p.adapter}", which no plugin provides: provider disabled`);
+}
 
 // Measured quality (evals) and the routing strategy that uses it.
 let strategy;
@@ -140,6 +152,7 @@ serve(
       keyStore,
       poolManager,
       privacy,
+      plugins,
       tracer,
       scoring,
       evals,

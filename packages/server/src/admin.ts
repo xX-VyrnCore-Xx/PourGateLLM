@@ -7,6 +7,7 @@ import { KeyStoreError, type KeyStore } from './keys.js';
 import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
 import type { KeyPool } from './keypool.js';
+import type { PluginHost } from './plugins.js';
 import type { PoolManager } from './pools.js';
 import type { RequestLog } from './requestlog.js';
 import { SlidingWindow } from './ratelimit.js';
@@ -28,6 +29,7 @@ export interface AdminOptions {
   poolManager?: PoolManager;
   requestLog?: RequestLog;
   cache?: ResponseCache;
+  plugins?: PluginHost;
   evals?: { runner: EvalRunner; store: EvalStore; strategy: Strategy; tasksPerModel: number; tasks: number };
   fetch?: typeof fetch;
   pools: Map<string, KeyPool>;
@@ -174,6 +176,8 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
   });
 
   const evalLimiter = new SlidingWindow(60_000, now);
+  app.get('/plugins', (c) => c.json({ plugins: opts.plugins?.plugins.map((p) => ({ name: p.name, hooks: [p.onRequest && 'onRequest', p.onResponse && 'onResponse'].filter(Boolean), adapters: Object.keys(p.adapters ?? {}) })) ?? [] }));
+
   app.get('/evals', (c) => {
     const e = opts.evals;
     if (!e) return c.json({ enabled: false });

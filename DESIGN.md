@@ -103,7 +103,7 @@ models:
 - **Cache**: exact-match + semantica (embedding locali o free), TTL, opt-in per token.
 - **Observability**: OpenTelemetry (trace/metriche), endpoint Prometheus, export log JSONL.
 - **Privacy**: PII redaction (regex + NER leggero), blocco provider che addestrano sui prompt.
-- **Plugin**: interfacce `ProviderAdapter`, `RoutingStrategy`, `Middleware` caricabili da pacchetti npm.
+- **Plugin** (implementato, vedi `docs/PLUGINS.md`): moduli JS fidati caricati da una cartella locale con hook `onRequest` (fail-closed), `onResponse` (osservatore) e `adapters` per provider non compatibili OpenAI. Le strategie di routing personalizzate e il caricamento da pacchetti npm restano futuri.
 
 ## 8. Roadmap
 
