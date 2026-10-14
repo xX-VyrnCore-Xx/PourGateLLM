@@ -49,6 +49,7 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 | | |
 |---|---|
 | 🔌 **OpenAI-compatible API** | `GET /v1/models`, `POST /v1/chat/completions` (streaming passthrough) and `POST /v1/embeddings`. Use `"model": "auto"` or a specific model id. |
+| 🔀 **Anthropic Messages API** | `POST /v1/messages` (streaming, tools, images) so the Anthropic SDKs and tools that speak that API can use the pool. `claude-*` model names map to tiers. |
 | 🧠 **Complexity routing** | `"model": "auto"` classifies each prompt (size, code, reasoning, tools…) and tries small, fast models for easy questions and the strongest ones for hard tasks, with automatic fallback to the other tiers. |
 | 🔁 **Smart failover** | On `429` / `5xx` / network errors it rotates to the next key, then the next model, honoring `Retry-After`. |
 | 📊 **Real quota accounting** | `rpm`, `rpd`, `tpm`, `tpd` enforced per key *and* model. Daily counters and cooldowns persist in SQLite. |
@@ -172,6 +173,23 @@ flowchart LR
 2. The **router** lists the models able to serve it, from the registry, and tries them in order.
 3. The **key pool** picks the next key that still has budget for that model, so limits are respected per key *and* model.
 4. If the provider answers `429`/`5xx`, that key cools down (persisted) and the next key or model takes over. Successful responses, including streams, are passed through untouched.
+
+## 🔀 Anthropic Messages API
+
+`POST /v1/messages` (and `/v1/messages/count_tokens`, an estimate) is translated to chat completions and back, so it goes through the same keys, limits, failover, cache and privacy controls. Authenticate with `x-api-key` or `Authorization: Bearer` using a PourGateLLM token.
+
+```python
+from anthropic import Anthropic
+
+client = Anthropic(base_url="http://localhost:3000", api_key="pg-your-token")
+msg = client.messages.create(model="claude-sonnet-4-5", max_tokens=200,
+                             messages=[{"role": "user", "content": "Hello!"}])
+```
+
+- **Models:** `claude-*haiku*` → `auto:small`, `*sonnet*` → `auto:medium`, `*opus*` → `auto:large`, any other `claude-*` → `auto`; registry ids and `auto…` work as they are. The response echoes the model name you sent.
+- **Supported:** system prompts, text and image blocks, tool definitions, `tool_use` / `tool_result`, `tool_choice`, `stop_sequences`, and SSE streaming with the standard event sequence.
+- **Not supported:** extended thinking, prompt-cache markers, documents/citations and server tools are ignored or rejected by the underlying models; usage during streaming is an estimate when the provider does not report it.
+- **Tested with** the official `@anthropic-ai/sdk` (create, stream, tool use and tool results) against a fake upstream. Free models are much weaker than Claude, so agentic tools that expect Claude-level tool use may behave poorly.
 
 ## 🧠 Complexity routing
 
@@ -373,7 +391,8 @@ Found a vulnerability? Please open a private security advisory on GitHub rather 
 - [x] PII redaction and per-provider privacy policies
 - [ ] Plugin system for providers, strategies and middleware
 - [x] Embeddings endpoint
-- [ ] Anthropic Messages, images and audio endpoints
+- [x] Anthropic Messages endpoint
+- [ ] Images and audio endpoints
 - [ ] Desktop app
 
 See [DESIGN.md](DESIGN.md) for the full vision, architecture and open questions.
