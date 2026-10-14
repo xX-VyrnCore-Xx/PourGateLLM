@@ -44,7 +44,7 @@ const envTokens = (process.env.POURGATE_TOKENS ?? '')
   .map((t) => t.trim())
   .filter(Boolean);
 if (envTokens.length === 0 && store.count() === 0) {
-  console.error('No API tokens configured. Set POURGATE_TOKENS or run: pnpm --filter @pourgate/server cli tokens create --name <name>');
+  console.error('No API tokens configured. Set POURGATE_TOKENS or run: pnpm cli tokens create --name <name>');
   process.exit(1);
 }
 
@@ -68,7 +68,7 @@ serve(
       poolManager,
       adminPassword: process.env.POURGATE_ADMIN_PASSWORD || undefined,
       secureCookie: process.env.POURGATE_COOKIE_SECURE === 'true',
-      staticDir: resolve(process.env.POURGATE_STATIC_DIR ?? 'public'),
+      staticDir: resolve(process.env.POURGATE_STATIC_DIR ?? (existsSync('public') ? 'public' : 'packages/client/dist')),
     }).fetch,
     port,
   },

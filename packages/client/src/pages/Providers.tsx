@@ -65,7 +65,7 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
             <h2 className="font-semibold">{p.provider}</h2>
             {p.enabled ? (
               <Badge>
-                {p.keys} {t('keys')}
+                {p.keys} {p.keys === 1 ? t('key') : t('keys')}
                 {p.keysCooling > 0 && ` · ${p.keysCooling} ${t('cooling')}`}
               </Badge>
             ) : (
