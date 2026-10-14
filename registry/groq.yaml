@@ -1,0 +1,16 @@
+# NOTE: limits are best-effort values for the free tier and must be re-verified
+# (see DESIGN.md, "Registry aperto"). Entries without `verified_at` are unverified.
+provider: groq
+base_url: https://api.groq.com/openai/v1
+api_key_env: GROQ_API_KEYS
+models:
+  - id: llama-3.3-70b-versatile
+    family: llama-3.3-70b
+    capabilities: [chat, tools, json_mode]
+    context: 131072
+    limits: { rpm: 30, rpd: 1000, tpm: 12000, tpd: 100000 }
+  - id: llama-3.1-8b-instant
+    family: llama-3.1-8b
+    capabilities: [chat, tools, json_mode]
+    context: 131072
+    limits: { rpm: 30, rpd: 14400, tpm: 6000, tpd: 500000 }
