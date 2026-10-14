@@ -1,0 +1,9 @@
+# Unverified: the ':free' model list changes often; rpm is the commonly documented free-tier limit.
+provider: openrouter
+base_url: https://openrouter.ai/api/v1
+api_key_env: OPENROUTER_API_KEYS
+models:
+  - id: meta-llama/llama-3.3-70b-instruct:free
+    family: llama-3.3-70b
+    capabilities: [chat, tools]
+    limits: { rpm: 20 }
