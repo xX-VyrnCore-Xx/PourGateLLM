@@ -159,3 +159,16 @@ export function redactBody(body: Json): { body: Json; count: number } {
   });
   return { body: { ...body, messages }, count };
 }
+
+/** Masks PII in an embeddings request (`input` as a string or an array of strings). */
+export function redactEmbeddingBody(body: Json): { body: Json; count: number } {
+  let count = 0;
+  const red = (v: unknown): unknown => {
+    if (typeof v !== 'string') return v;
+    const r = redactText(v);
+    count += r.count;
+    return r.text;
+  };
+  const input = Array.isArray(body.input) ? body.input.map(red) : red(body.input);
+  return { body: { ...body, input }, count };
+}

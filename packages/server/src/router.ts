@@ -2,7 +2,7 @@ import type { ModelEntry, ProviderEntry, Tier } from '@pourgate/shared';
 import { COMPLEXITY_TIER, TIER_ORDER, analyzePrompt, requiredCapabilities, type Analysis } from './complexity.js';
 import { rankScore, type ModelScore, type Strategy } from './evals.js';
 import { KeyPool } from './keypool.js';
-import { DEFAULT_PRIVACY, needsRedaction, providerAllowed, redactBody, type PrivacyConfig } from './privacy.js';
+import { DEFAULT_PRIVACY, needsRedaction, providerAllowed, redactBody, redactEmbeddingBody, type PrivacyConfig } from './privacy.js';
 
 export interface Candidate {
   provider: ProviderEntry;
@@ -37,13 +37,20 @@ export function parseVirtual(requested: string): { forced: Tier | null } | undef
   return m ? { forced: m[1] as Tier } : undefined;
 }
 
-export function listCandidates(registry: ProviderEntry[], requested: string): Candidate[] {
+export type Endpoint = 'chat' | 'embeddings';
+
+const ENDPOINT_PATH: Record<Endpoint, string> = { chat: '/chat/completions', embeddings: '/embeddings' };
+
+export function listCandidates(registry: ProviderEntry[], requested: string, endpoint: Endpoint = 'chat'): Candidate[] {
+  const capability = endpoint === 'chat' ? 'chat' : 'embeddings';
   const all = registry.flatMap((provider) =>
     provider.models
-      .filter((m) => m.capabilities.includes('chat'))
+      .filter((m) => m.capabilities.includes(capability))
       .map((model) => ({ provider, model })),
   );
-  return parseVirtual(requested) ? all : all.filter((c) => c.model.id === requested);
+  // Embeddings have no complexity tiers: only plain `auto` is a virtual id there.
+  const virtual = endpoint === 'chat' ? parseVirtual(requested) : requested === AUTO_MODEL ? { forced: null } : undefined;
+  return virtual ? all : all.filter((c) => c.model.id === requested);
 }
 
 /**
@@ -95,9 +102,10 @@ export async function routeChat(
   body: Record<string, unknown>,
   requested: string,
   signal?: AbortSignal,
+  endpoint: Endpoint = 'chat',
 ): Promise<Response> {
   const privacy = deps.privacy ?? DEFAULT_PRIVACY;
-  let candidates = listCandidates(deps.registry, requested);
+  let candidates = listCandidates(deps.registry, requested, endpoint);
   if (candidates.length > 0) {
     const allowed = candidates.filter((c) => providerAllowed(privacy.policy, c.provider));
     if (allowed.length === 0) {
@@ -110,8 +118,13 @@ export async function routeChat(
     }
     candidates = allowed;
   }
-  const virtual = parseVirtual(requested);
+  const virtual = endpoint === 'chat' ? parseVirtual(requested) : undefined;
   let analysis: Analysis | undefined;
+  if (endpoint === 'embeddings' && requested === AUTO_MODEL) {
+    // Spread load: least used embedding model first, registry order on ties.
+    const usage = (c: Candidate) => deps.pools.get(c.provider.provider)?.usageToday(c.model.id).requests ?? 0;
+    candidates = candidates.map((c, i) => ({ c, i, u: usage(c) })).sort((a, b) => a.u - b.u || a.i - b.i).map((x) => x.c);
+  }
   if (virtual) {
     analysis = analyzePrompt(body);
     const preferred = virtual.forced ?? COMPLEXITY_TIER[analysis.complexity];
@@ -140,10 +153,10 @@ export async function routeChat(
       if (!key) break;
       tried.add(key);
       const mask = needsRedaction(privacy.pii, provider);
-      if (mask) redacted ??= redactBody(body);
+      if (mask) redacted ??= endpoint === 'chat' ? redactBody(body) : redactEmbeddingBody(body);
       let res: Response;
       try {
-        res = await deps.fetch(`${provider.base_url.replace(/\/$/, '')}/chat/completions`, {
+        res = await deps.fetch(`${provider.base_url.replace(/\/$/, '')}${ENDPOINT_PATH[endpoint]}`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
           body: JSON.stringify({ ...(mask ? redacted!.body : body), model: model.id }),
