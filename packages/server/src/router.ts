@@ -2,6 +2,7 @@ import type { ModelEntry, ProviderEntry, Tier } from '@pourgate/shared';
 import { COMPLEXITY_TIER, TIER_ORDER, analyzePrompt, requiredCapabilities, type Analysis } from './complexity.js';
 import { rankScore, type ModelScore, type Strategy } from './evals.js';
 import { KeyPool } from './keypool.js';
+import type { ProviderAdapter } from './plugins.js';
 import { DEFAULT_PRIVACY, needsRedaction, providerAllowed, redactBody, redactEmbeddingBody, type PrivacyConfig } from './privacy.js';
 
 export interface Candidate {
@@ -17,6 +18,8 @@ export interface RouterDeps {
   privacy?: PrivacyConfig;
   /** Measured model quality, used to order models inside a tier. */
   scoring?: Scoring;
+  /** Plugin-provided adapters for non-OpenAI-compatible providers, by name. */
+  adapters?: Map<string, ProviderAdapter>;
   /** Called after each upstream attempt (for tracing); never receives prompts. */
   onAttempt?: (a: AttemptInfo) => void;
 }
@@ -158,6 +161,9 @@ export async function routeChat(
   for (const { provider, model } of candidates) {
     const pool = deps.pools.get(provider.provider);
     if (!pool) continue;
+    const adapter = provider.adapter ? deps.adapters?.get(provider.adapter) : undefined;
+    // An adapter is required (and only supported) for chat; otherwise the provider cannot serve this call.
+    if (provider.adapter && (!adapter || endpoint !== 'chat')) continue;
     const tried = new Set<string>();
     for (;;) {
       const key = pool.acquire({ model: model.id, ...model.limits }, tried);
@@ -169,12 +175,23 @@ export async function routeChat(
       const attemptStart = Date.now();
       const attemptT0 = performance.now();
       try {
-        res = await deps.fetch(`${provider.base_url.replace(/\/$/, '')}${ENDPOINT_PATH[endpoint]}`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-          body: JSON.stringify({ ...(mask ? redacted!.body : body), model: model.id }),
-          signal,
-        });
+        if (adapter) {
+          const built = adapter.buildRequest({
+            body: { ...(mask ? redacted!.body : body), model: model.id },
+            model: model.id,
+            baseUrl: provider.base_url,
+            apiKey: key,
+            stream: body.stream === true,
+          });
+          res = await deps.fetch(built.url, { ...built.init, signal });
+        } else {
+          res = await deps.fetch(`${provider.base_url.replace(/\/$/, '')}${ENDPOINT_PATH[endpoint]}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+            body: JSON.stringify({ ...(mask ? redacted!.body : body), model: model.id }),
+            signal,
+          });
+        }
       } catch (err) {
         deps.onAttempt?.({ provider: provider.provider, model: model.id, startMs: attemptStart, endMs: attemptStart + (performance.now() - attemptT0), status: null });
         if (signal?.aborted) throw err;
@@ -191,6 +208,15 @@ export async function routeChat(
         pool.cooldown(key, 10_000);
         await res.body?.cancel();
         continue;
+      }
+      if (adapter && res.ok) {
+        try {
+          res = await adapter.parseResponse(res, { model: model.id, stream: body.stream === true });
+        } catch {
+          // A broken adapter must not take the gateway down: treat it like an upstream failure.
+          pool.cooldown(key, 10_000);
+          continue;
+        }
       }
       // Best-effort accounting of provider-reported tokens (non-streaming JSON responses only).
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) {

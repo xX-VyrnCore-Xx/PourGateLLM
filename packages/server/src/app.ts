@@ -10,6 +10,7 @@ import { anthropicError, estimateInputTokens, toOpenAIRequest, validateRequest, 
 import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
 import type { Metrics } from './metrics.js';
+import { PluginError, RejectedByPlugin, type PluginHost } from './plugins.js';
 import { newSpanId, newTraceId, parseTraceparent, type Tracer } from './otel.js';
 import { DEFAULT_PRIVACY, tighten, type PrivacyConfig } from './privacy.js';
 import { observeResponse } from './observe.js';
@@ -41,6 +42,8 @@ export interface AppOptions {
   scoring?: Scoring;
   /** Eval runner/store, exposed through the admin API. */
   evals?: { runner: EvalRunner; store: EvalStore; strategy: Strategy; tasksPerModel: number; tasks: number };
+  /** Trusted plugins: request hooks, response observers and provider adapters. */
+  plugins?: PluginHost;
   /** OTLP trace exporter; tracing is off when unset. */
   tracer?: Tracer;
   /** Exact-match response cache; disabled when unset. */
@@ -173,6 +176,22 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       opts.store.recordRequest(record.id);
     }
 
+    // Plugin request hooks (fail closed: a failing hook rejects the request).
+    if (opts.plugins?.hasHooks) {
+      const headers: Record<string, string> = {};
+      for (const [k, v] of c.req.raw.headers) {
+        if (!['authorization', 'x-api-key', 'cookie', 'proxy-authorization'].includes(k)) headers[k] = v;
+      }
+      try {
+        payload = await opts.plugins.runOnRequest({ endpoint, body: payload, clientId: clientId ?? null, headers });
+      } catch (err) {
+        if (err instanceof RejectedByPlugin) return errorResponse(err.status, err.message, 'invalid_request_error', 'rejected_by_plugin');
+        const name = err instanceof PluginError ? err.plugin : 'unknown';
+        return errorResponse(500, `Plugin "${name}" failed`, 'server_error', 'plugin_error');
+      }
+      if (typeof payload.model !== 'string') return errorResponse(500, 'A plugin removed the model from the request', 'server_error', 'plugin_error');
+    }
+
     const startedAt = performance.now();
     const startedWall = Date.now();
     const privacy = tighten(opts.privacy ?? DEFAULT_PRIVACY, c.req.header('x-pourgate-privacy'));
@@ -194,6 +213,18 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       const complexity = r.routed.headers.get('x-pourgate-complexity');
       opts.metrics?.observe({ provider, model, status: r.routed.status, complexity, seconds: r.totalMs / 1000, tokens: r.tokens });
       if (r.cache) opts.metrics?.cache(r.cache);
+      opts.plugins?.runOnResponse({
+        endpoint,
+        requested: payload.model as string,
+        provider,
+        model,
+        status: r.routed.status,
+        totalMs: r.totalMs,
+        tokens: r.tokens,
+        cache: r.cache,
+        clientId: clientId ?? null,
+        error: r.error,
+      });
       tracer?.record({
         traceId,
         spanId,
@@ -271,6 +302,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         fetch: doFetch,
         privacy,
         scoring: opts.scoring,
+        adapters: opts.plugins?.adapters,
         onAttempt: tracer
           ? (a) =>
               tracer.record({
@@ -293,7 +325,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     );
     const ttfbMs = performance.now() - startedAt;
     const res =
-      opts.requestLog || opts.metrics || tracer || cacheKey
+      opts.requestLog || opts.metrics || tracer || opts.plugins?.hasHooks || cacheKey
         ? observeResponse(routed, startedAt, (f) => {
             if (cacheKey && cache && routed.status === 200 && f.body) {
               try {
@@ -365,6 +397,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         requestLog: opts.requestLog,
         cache: opts.cache,
         evals: opts.evals,
+        plugins: opts.plugins,
         fetch: opts.fetch,
         secureCookie: opts.secureCookie,
       }),

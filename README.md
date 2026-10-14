@@ -49,6 +49,7 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 | | |
 |---|---|
 | 🔌 **OpenAI-compatible API** | `GET /v1/models`, `POST /v1/chat/completions` (streaming passthrough) and `POST /v1/embeddings`. Use `"model": "auto"` or a specific model id. |
+| 🧩 **Plugins** | Drop-in JS modules: rewrite or reject requests, observe responses, and add adapters for providers that are not OpenAI-compatible. See [docs/PLUGINS.md](docs/PLUGINS.md). |
 | 🔀 **Anthropic Messages API** | `POST /v1/messages` (streaming, tools, images) so the Anthropic SDKs and tools that speak that API can use the pool. `claude-*` model names map to tiers. |
 | 🧠 **Complexity routing** | `"model": "auto"` classifies each prompt (size, code, reasoning, tools…) and tries small, fast models for easy questions and the strongest ones for hard tasks, with automatic fallback to the other tiers. |
 | 🔁 **Smart failover** | On `429` / `5xx` / network errors it rotates to the next key, then the next model, honoring `Retry-After`. |
@@ -305,6 +306,7 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_REGISTRY_URL` | | Bundle URL to sync the registry from. |
 | `POURGATE_REGISTRY_PUBKEY` | | Ed25519 public key (PEM or file path). When set, bundles **must** be signed. |
 | `POURGATE_REGISTRY_SYNC_HOURS` | `12` | Sync interval. |
+| `POURGATE_PLUGINS_DIR` | `plugins` | Directory of trusted plugin modules ([docs](docs/PLUGINS.md)). |
 | `POURGATE_STATIC_DIR` | `public`, else `packages/client/dist` | Built dashboard directory. |
 
 ### Client tokens
@@ -391,7 +393,7 @@ Found a vulnerability? Please open a private security advisory on GitHub rather 
 - [x] Request analytics, JSONL export and Prometheus metrics
 - [x] OpenTelemetry (OTLP) tracing
 - [x] PII redaction and per-provider privacy policies
-- [ ] Plugin system for providers, strategies and middleware
+- [x] Plugin system (request hooks, observers, provider adapters)
 - [x] Embeddings endpoint
 - [x] Anthropic Messages endpoint
 - [ ] Images and audio endpoints

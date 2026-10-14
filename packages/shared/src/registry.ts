@@ -36,6 +36,11 @@ export const providerSchema = z
     base_url: z.string().url(),
     api_key_env: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
     auth: z.enum(['bearer']).default('bearer'),
+    /** Name of a plugin-provided adapter for providers that are not OpenAI-compatible. */
+    adapter: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]*$/)
+      .optional(),
     trains_on_prompts: z.boolean().optional(),
     models: z.array(modelSchema).min(1),
   })

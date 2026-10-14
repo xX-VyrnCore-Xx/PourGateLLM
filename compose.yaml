@@ -9,5 +9,7 @@ services:
       - "${PORT:-3000}:3000"
     volumes:
       - pourgate-data:/app/data
+      # Plugins (see docs/PLUGINS.md); create ./plugins first:
+      # - ./plugins:/app/plugins:ro
 volumes:
   pourgate-data:
