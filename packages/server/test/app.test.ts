@@ -32,6 +32,15 @@ describe('registry', () => {
     const entries = loadRegistry(resolve(__dirname, '../../../registry'));
     expect(entries.length).toBeGreaterThan(0);
   });
+
+  it('has unique providers and key env vars, and unique model ids per provider', () => {
+    const entries = loadRegistry(resolve(__dirname, '../../../registry'));
+    expect(new Set(entries.map((e) => e.provider)).size).toBe(entries.length);
+    expect(new Set(entries.map((e) => e.api_key_env)).size).toBe(entries.length);
+    for (const e of entries) {
+      expect(new Set(e.models.map((m) => m.id)).size).toBe(e.models.length);
+    }
+  });
 });
 
 describe('gateway', () => {

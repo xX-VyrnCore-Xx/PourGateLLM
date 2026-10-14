@@ -1,0 +1,13 @@
+# Unverified: model ids and limits must be checked against the provider docs before relying on them.
+provider: gemini
+base_url: https://generativelanguage.googleapis.com/v1beta/openai
+api_key_env: GEMINI_API_KEYS
+models:
+  - id: gemini-2.5-flash
+    family: gemini-2.5-flash
+    capabilities: [chat, tools, json_mode, vision]
+    context: 1048576
+  - id: gemini-2.5-flash-lite
+    family: gemini-2.5-flash-lite
+    capabilities: [chat, tools, json_mode, vision]
+    context: 1048576

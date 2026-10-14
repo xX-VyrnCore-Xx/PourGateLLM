@@ -1,0 +1,11 @@
+# Unverified: model ids and limits must be checked against the provider docs before relying on them.
+provider: mistral
+base_url: https://api.mistral.ai/v1
+api_key_env: MISTRAL_API_KEYS
+models:
+  - id: mistral-small-latest
+    family: mistral-small
+    capabilities: [chat, tools, json_mode]
+  - id: open-mistral-nemo
+    family: mistral-nemo
+    capabilities: [chat, tools, json_mode]

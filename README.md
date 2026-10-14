@@ -7,7 +7,7 @@ See [DESIGN.md](DESIGN.md) for the vision, architecture and roadmap.
 
 MVP scaffold: `GET /v1/models` and `POST /v1/chat/completions` (streaming passthrough),
 per-key rotation with cooldown and RPM limiting, failover across keys/models, and a
-registry of providers in [`registry/`](registry). Only Groq is wired up so far.
+registry of providers in [`registry/`](registry). Providers in the registry: Groq, Gemini, Cerebras, Mistral, OpenRouter (model ids and limits are unverified except where noted).
 
 ## Quick start
 

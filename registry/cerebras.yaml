@@ -1,0 +1,11 @@
+# Unverified: model ids and limits must be checked against the provider docs before relying on them.
+provider: cerebras
+base_url: https://api.cerebras.ai/v1
+api_key_env: CEREBRAS_API_KEYS
+models:
+  - id: llama3.1-8b
+    family: llama-3.1-8b
+    capabilities: [chat, tools, json_mode]
+  - id: gpt-oss-120b
+    family: gpt-oss-120b
+    capabilities: [chat, tools, json_mode]
