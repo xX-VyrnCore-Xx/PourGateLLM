@@ -31,7 +31,19 @@ for (const provider of registry) {
   pools.set(provider.provider, new KeyPool(keys));
 }
 
+if (!process.env.POURGATE_ADMIN_PASSWORD) {
+  console.warn('POURGATE_ADMIN_PASSWORD not set: dashboard/admin API disabled (use the CLI to manage tokens)');
+}
+
 const port = Number(process.env.PORT ?? 3000);
-serve({ fetch: createApp({ registry, envTokens, store, pools }).fetch, port }, (info) => {
+serve({ fetch: createApp({
+    registry,
+    envTokens,
+    store,
+    pools,
+    adminPassword: process.env.POURGATE_ADMIN_PASSWORD || undefined,
+    secureCookie: process.env.POURGATE_COOKIE_SECURE === 'true',
+    staticDir: resolve(process.env.POURGATE_STATIC_DIR ?? 'public'),
+  }).fetch, port }, (info) => {
   console.log(`PourGateLLM listening on :${info.port} (${pools.size} provider(s) enabled)`);
 });

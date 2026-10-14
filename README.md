@@ -5,7 +5,7 @@ See [DESIGN.md](DESIGN.md) for the vision, architecture and roadmap.
 
 ## Status
 
-MVP scaffold: `GET /v1/models` and `POST /v1/chat/completions` (streaming passthrough),
+MVP scaffold with an admin dashboard (React + Tailwind): `GET /v1/models` and `POST /v1/chat/completions` (streaming passthrough),
 per-key rotation with cooldown and RPM limiting, per-client tokens with RPM/daily quotas and usage persisted in SQLite, failover across keys/models, and a
 registry of providers in [`registry/`](registry). Providers in the registry: Groq, Gemini, Cerebras, Mistral, OpenRouter (model ids and limits are unverified except where noted).
 
@@ -23,6 +23,13 @@ curl localhost:3000/v1/chat/completions \
 ```
 
 Use `"model": "auto"` to let the gateway pick any available model, or a specific model id.
+
+## Dashboard
+
+Set `POURGATE_ADMIN_PASSWORD` and open `http://localhost:3000/` to manage client tokens and see provider/key status.
+In development run `pnpm dev` (API on :3000) and `pnpm --filter @pourgate/client dev` (UI on :5173, proxies the API).
+Outside Docker, point the server at the built UI with `POURGATE_STATIC_DIR=packages/client/dist`.
+Serve it behind HTTPS in production and set `POURGATE_COOKIE_SECURE=true`.
 
 ## Docker
 

@@ -1,6 +1,10 @@
 import { timingSafeEqual } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
 import { Hono } from 'hono';
+import { serveStatic } from '@hono/node-server/serve-static';
 import type { ProviderEntry } from '@pourgate/shared';
+import { createAdminRoutes } from './admin.js';
 import { KeyPool } from './keypool.js';
 import { SlidingWindow } from './ratelimit.js';
 import { AUTO_MODEL, errorResponse, routeChat } from './router.js';
@@ -13,6 +17,11 @@ export interface AppOptions {
   store: TokenStore;
   pools: Map<string, KeyPool>;
   fetch?: typeof fetch;
+  /** Enables the admin API when set. */
+  adminPassword?: string;
+  secureCookie?: boolean;
+  /** Directory with the built dashboard; served at / when it exists. */
+  staticDir?: string;
 }
 
 type Principal = { kind: 'env' } | { kind: 'client'; record: TokenRecord };
@@ -112,6 +121,29 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     }
     return res;
   });
+
+  if (opts.adminPassword) {
+    app.route(
+      '/admin/api',
+      createAdminRoutes({
+        password: opts.adminPassword,
+        store: opts.store,
+        registry: opts.registry,
+        pools: opts.pools,
+        secureCookie: opts.secureCookie,
+      }),
+    );
+  }
+
+  if (opts.staticDir && existsSync(resolve(opts.staticDir, 'index.html'))) {
+    const root = relative(process.cwd(), resolve(opts.staticDir)) || '.';
+    app.get('*', serveStatic({ root }));
+    // SPA fallback for client-side routes (never for API paths).
+    app.get('*', async (c, next) => {
+      if (c.req.path.startsWith('/v1/') || c.req.path.startsWith('/admin/api/')) return next();
+      return serveStatic({ root, path: 'index.html' })(c, next);
+    });
+  }
 
   app.notFound(() => errorResponse(404, 'Not found', 'invalid_request_error'));
   return app;

@@ -11,6 +11,7 @@ ENV NODE_ENV=production \
     POURGATE_DB=/app/data/pourgate.db
 WORKDIR /app
 COPY --from=build /app/packages/server/dist ./dist
+COPY --from=build /app/packages/client/dist ./public
 COPY registry ./registry
 RUN mkdir -p data && chown node:node data
 USER node

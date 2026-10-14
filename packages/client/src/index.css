@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --color-border: oklch(0.92 0 0);
+  --color-muted: oklch(0.55 0 0);
+  --color-accent: oklch(0.55 0.2 265);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root { color-scheme: dark; }
+  @theme {
+    --color-border: oklch(0.3 0 0);
+    --color-muted: oklch(0.7 0 0);
+  }
+}
+
+body { @apply bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 antialiased; }

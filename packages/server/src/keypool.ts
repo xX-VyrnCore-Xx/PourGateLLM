@@ -39,6 +39,12 @@ export class KeyPool {
     return undefined;
   }
 
+  /** Number of keys currently cooling down. */
+  coolingCount(): number {
+    const t = this.now();
+    return this.keys.filter((k) => (this.cooldownUntil.get(k) ?? 0) > t).length;
+  }
+
   cooldown(key: string, ms: number): void {
     this.cooldownUntil.set(key, this.now() + ms);
   }
