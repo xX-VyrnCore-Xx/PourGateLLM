@@ -41,3 +41,14 @@ export type Limits = z.infer<typeof limitsSchema>;
 export type Capability = z.infer<typeof capabilitySchema>;
 export type ModelEntry = z.infer<typeof modelSchema>;
 export type ProviderEntry = z.infer<typeof providerSchema>;
+
+/** Distributable snapshot of the whole registry, published as a single file (+ optional detached signature). */
+export const bundleSchema = z
+  .object({
+    version: z.number().int().nonnegative(),
+    generated_at: z.string(),
+    providers: z.array(providerSchema).min(1),
+  })
+  .strict();
+
+export type RegistryBundle = z.infer<typeof bundleSchema>;

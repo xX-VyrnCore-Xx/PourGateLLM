@@ -76,7 +76,8 @@ models:
     verified_at: 2026-10-01
 ```
 
-- Sync: il gateway scarica periodicamente un release/tag del registry (hash verificato, firma opzionale con chiave pubblica del progetto, nessun servizio a pagamento).
+- Sync: il gateway scarica periodicamente un bundle JSON del registry (ogni 12 h di default) con firma Ed25519 staccata opzionale (`<url>.sig`) verificata con una chiave pubblica configurata; nessun servizio a pagamento.
+- Modello di fiducia: le voci del registry decidono a chi vengono inviate le chiavi API. Senza firma, il bundle può aggiornare solo modelli/limiti di provider già inclusi (mai endpoint o variabili chiave, mai nuovi provider). Con firma valida sono accettati anche nuovi provider, ma solo con endpoint `https` pubblici e variabile chiave `*_API_KEYS`. Versioni più vecchie sono rifiutate; l'ultimo bundle valido è in cache e ri-verificato all'avvio.
 - Override locali: l'utente può correggere o aggiungere voci senza toccare il registry.
 - Drift: se i limiti osservati divergono, la dashboard propone di aprire una PR/issue.
 

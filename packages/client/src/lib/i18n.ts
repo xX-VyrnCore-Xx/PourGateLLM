@@ -32,6 +32,15 @@ const en = {
   trainsOnPrompts: 'May train on your prompts',
   error: 'Something went wrong',
   unlimited: 'unlimited',
+  registry: 'Model registry',
+  syncNow: 'Sync now',
+  syncing: 'Syncing…',
+  signed: 'signed',
+  unsigned: 'unsigned',
+  version: 'version',
+  lastSync: 'Last sync',
+  never: 'never',
+  noRegistryUrl: 'Sync disabled: set POURGATE_REGISTRY_URL',
 } as const;
 
 export type Key = keyof typeof en;
@@ -68,6 +77,15 @@ const it: Record<Key, string> = {
   trainsOnPrompts: 'Può addestrarsi sui tuoi prompt',
   error: 'Qualcosa è andato storto',
   unlimited: 'illimitato',
+  registry: 'Registry dei modelli',
+  syncNow: 'Sincronizza',
+  syncing: 'Sincronizzo…',
+  signed: 'firmato',
+  unsigned: 'non firmato',
+  version: 'versione',
+  lastSync: 'Ultimo sync',
+  never: 'mai',
+  noRegistryUrl: 'Sync disattivato: imposta POURGATE_REGISTRY_URL',
 };
 
 const dictionaries: Record<string, Record<Key, string>> = { en, it };

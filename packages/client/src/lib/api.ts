@@ -47,6 +47,15 @@ export interface ProviderRow {
   }[];
 }
 
+export interface RegistryStatus {
+  url: string | null;
+  signed: boolean;
+  lastAttemptAt: number | null;
+  lastResult: 'never' | 'updated' | 'unchanged' | 'rejected' | 'error';
+  detail: string;
+  version: number | null;
+}
+
 export const api = {
   session: () => request<{ authenticated: boolean }>('/session'),
   login: (password: string) => request<void>('/login', { method: 'POST', body: JSON.stringify({ password }) }),
@@ -56,4 +65,6 @@ export const api = {
     request<{ token: string; record: TokenRow }>('/tokens', { method: 'POST', body: JSON.stringify(body) }),
   revokeToken: (id: number) => request<void>(`/tokens/${id}`, { method: 'DELETE' }),
   providers: () => request<ProviderRow[]>('/providers'),
+  registry: () => request<RegistryStatus | null>('/registry'),
+  syncRegistry: () => request<RegistryStatus>('/registry/sync', { method: 'POST' }),
 };

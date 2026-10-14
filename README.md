@@ -31,6 +31,27 @@ In development run `pnpm dev` (API on :3000) and `pnpm --filter @pourgate/client
 Outside Docker, point the server at the built UI with `POURGATE_STATIC_DIR=packages/client/dist`.
 Serve it behind HTTPS in production and set `POURGATE_COOKIE_SECURE=true`.
 
+## Registry sync
+
+The provider/model catalog in [`registry/`](registry) is open (PRs welcome). A gateway can follow a published bundle:
+
+```bash
+# publisher: build (and optionally sign) a bundle, then host registry.json and registry.json.sig anywhere over https
+pnpm --filter @pourgate/server cli registry keygen --out-dir keys
+pnpm --filter @pourgate/server cli registry bundle --out dist/registry.json --sign keys/registry-private.pem
+
+# gateway
+POURGATE_REGISTRY_URL=https://example.com/registry.json
+POURGATE_REGISTRY_PUBKEY=./registry-public.pem     # optional but recommended
+```
+
+Trust model, because registry entries decide where your API keys are sent:
+
+- **Unsigned** (no public key): the remote bundle may only update models, limits and quirks of providers already shipped locally. Endpoints and key variables are never taken from it, and new providers are ignored.
+- **Signed** (public key set): the Ed25519 signature must verify. New providers are accepted, but endpoints must be public `https` URLs and the key variable must end in `_API_KEYS`.
+- Older versions than the current one are rejected, size is capped at 2 MB, and the last accepted bundle is cached (and re-verified) in `data/registry-cache.json`.
+- Local overrides in `POURGATE_OVERRIDES_DIR` (same YAML format) always win; models merge by id.
+
 ## Docker
 
 ```bash

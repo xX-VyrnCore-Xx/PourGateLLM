@@ -5,12 +5,19 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 import type { ProviderEntry } from '@pourgate/shared';
 import type { KeyPool } from './keypool.js';
 import { SlidingWindow } from './ratelimit.js';
+import type { SyncStatus } from './registry-sync.js';
 import type { TokenStore } from './tokens.js';
+
+export interface RegistrySyncHandle {
+  status(): SyncStatus;
+  sync(): Promise<SyncStatus>;
+}
 
 export interface AdminOptions {
   password: string;
   store: TokenStore;
-  registry: ProviderEntry[];
+  registry: () => ProviderEntry[];
+  registrySync?: RegistrySyncHandle;
   pools: Map<string, KeyPool>;
   /** Set the Secure cookie flag (use when served over HTTPS). */
   secureCookie?: boolean;
@@ -133,9 +140,17 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     return opts.store.revoke(id) ? c.body(null, 204) : c.json({ error: 'not found or already revoked' }, 404);
   });
 
+  const syncLimiter = new SlidingWindow(60_000, now);
+  app.get('/registry', (c) => c.json(opts.registrySync?.status() ?? null));
+  app.post('/registry/sync', async (c) => {
+    if (!opts.registrySync) return c.json({ error: 'registry sync is not configured' }, 404);
+    if (!syncLimiter.take('sync', 6)) return c.json({ error: 'too many sync requests' }, 429);
+    return c.json(await opts.registrySync.sync());
+  });
+
   app.get('/providers', (c) =>
     c.json(
-      opts.registry.map((p) => {
+      opts.registry().map((p) => {
         const pool = opts.pools.get(p.provider);
         return {
           provider: p.provider,

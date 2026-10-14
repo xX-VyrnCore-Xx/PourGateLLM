@@ -4,14 +4,17 @@ import { relative, resolve } from 'node:path';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import type { ProviderEntry } from '@pourgate/shared';
-import { createAdminRoutes } from './admin.js';
+import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
 import { KeyPool } from './keypool.js';
 import { SlidingWindow } from './ratelimit.js';
 import { AUTO_MODEL, errorResponse, routeChat } from './router.js';
 import type { TokenRecord, TokenStore } from './tokens.js';
 
 export interface AppOptions {
-  registry: ProviderEntry[];
+  /** Providers; pass a function to pick up live registry updates. */
+  registry: ProviderEntry[] | (() => ProviderEntry[]);
+  /** Registry sync manager, exposed through the admin API when set. */
+  registrySync?: RegistrySyncHandle;
   /** Static bootstrap tokens (POURGATE_TOKENS): unlimited, not tracked. */
   envTokens?: string[];
   store: TokenStore;
@@ -41,6 +44,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   const app = new Hono<{ Variables: { principal: Principal } }>();
   const doFetch = opts.fetch ?? fetch;
   const envTokens = opts.envTokens ?? [];
+  const getRegistry = typeof opts.registry === 'function' ? opts.registry : () => opts.registry as ProviderEntry[];
   const rpm = new SlidingWindow();
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
@@ -64,7 +68,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   app.get('/v1/models', (c) => {
     const data = [
       { id: AUTO_MODEL, object: 'model', created: 0, owned_by: 'pourgate' },
-      ...opts.registry.flatMap((p) =>
+      ...getRegistry().flatMap((p) =>
         p.models.map((m) => ({ id: m.id, object: 'model', created: 0, owned_by: p.provider })),
       ),
     ];
@@ -101,7 +105,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     }
 
     const res = await routeChat(
-      { registry: opts.registry, pools: opts.pools, fetch: doFetch },
+      { registry: getRegistry(), pools: opts.pools, fetch: doFetch },
       payload,
       payload.model,
       c.req.raw.signal,
@@ -128,7 +132,8 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       createAdminRoutes({
         password: opts.adminPassword,
         store: opts.store,
-        registry: opts.registry,
+        registry: getRegistry,
+        registrySync: opts.registrySync,
         pools: opts.pools,
         secureCookie: opts.secureCookie,
       }),
