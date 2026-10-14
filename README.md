@@ -53,6 +53,7 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 | 🔁 **Smart failover** | On `429` / `5xx` / network errors it rotates to the next key, then the next model, honoring `Retry-After`. |
 | 📊 **Real quota accounting** | `rpm`, `rpd`, `tpm`, `tpd` enforced per key *and* model. Daily counters and cooldowns persist in SQLite. |
 | 🔑 **Per-client tokens** | Create tokens with their own rate limit, daily quota and expiry. Stored as SHA-256 hashes, revocable any time. |
+| 🛡️ **Privacy controls** | Mask emails, phones, cards, IBANs, tax ids and secrets before prompts leave the gateway, and exclude providers that train on prompts. Clients can tighten (never loosen) per request. |
 | 📈 **Analytics & metrics** | Request log (metadata only, never prompts), dashboard analytics (volume, errors, p50/p95 latency, tokens per model), JSONL export and a Prometheus `/metrics` endpoint. |
 | 🖥️ **Dashboard** | React + Tailwind UI in light and dark mode (English, Italian): manage tokens and provider keys, test keys, watch usage. |
 | 🗂️ **Open model registry** | YAML catalog with local overrides and optional signed, auto-syncing bundles. |
@@ -200,6 +201,22 @@ Responses include `x-pourgate-complexity` (for `auto`) and `x-pourgate-tier` so 
 
 Set `POURGATE_ADMIN_PASSWORD` to enable it. Sessions use an `HttpOnly`, `SameSite=Strict` cookie, login attempts are rate-limited, and cross-origin writes are rejected. Serve it over HTTPS and set `POURGATE_COOKIE_SECURE=true`.
 
+## 🛡️ Privacy controls
+
+Free tiers often use prompts to improve their models. Two independent controls reduce what leaves your machine:
+
+| Control | What it does |
+|---|---|
+| **PII masking** (`POURGATE_PII_MODE`) | Replaces emails, phone numbers, valid credit-card numbers (Luhn), valid IBANs (mod 97), Italian tax ids (codice fiscale) and secrets (API keys, JWTs, private keys, bearer tokens) with placeholders such as `[EMAIL]` or `[SECRET]` in message text, content parts and tool-call arguments. Images and other fields are untouched. |
+| **Provider policy** (`POURGATE_PRIVACY_POLICY`) | Excludes providers from routing based on the registry flag `trains_on_prompts`. An excluded explicit model returns `400 privacy_policy`. |
+
+`training` mode masks only for providers that may train on prompts (flag `true` or unknown) and sends the original text to providers explicitly flagged `false`. Responses report how many items were masked in `x-pourgate-redacted`, and the request log stores the count (never the content).
+
+Clients can ask for stricter handling per request with `x-pourgate-privacy: redact, strict` (also `no-training`), and can never relax the operator's settings.
+
+> [!IMPORTANT]
+> The shipped registry does not assert whether each provider trains on prompts (the flag is unset), so `no-training` has no effect until you set the flag for your providers in [overrides](registry). Masking is regex-based: it catches common structured identifiers, not names or free-form personal details, and it is not a compliance guarantee. Streaming responses are never un-masked: the model sees and answers with the placeholders.
+
 ## 📈 Analytics and metrics
 
 The **Analytics** tab shows request volume and errors over time, tokens, and p50/p95 latency per model, for the last 24 hours, 7 or 30 days, with a one-click JSONL export.
@@ -227,6 +244,8 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_MASTER_KEY` | auto | 32-byte key (hex or base64) encrypting dashboard-stored keys. Generate with `openssl rand -hex 32`. If unset, `data/master.key` is created on first start. |
 | `POURGATE_DB` | `data/pourgate.db` | SQLite database path. |
 | `PORT` | `3000` | HTTP port. |
+| `POURGATE_PII_MODE` | `off` | `off`, `training` (mask for providers that may train on prompts) or `all`. |
+| `POURGATE_PRIVACY_POLICY` | `any` | `any`, `no-training` (skip providers flagged `trains_on_prompts: true`) or `strict` (only providers flagged `false`). |
 | `POURGATE_METRICS_TOKEN` | | Enables `GET /metrics` (Prometheus), protected by this bearer token. |
 | `POURGATE_LOG_RETENTION_DAYS` | `30` | How long request metadata is kept. |
 | `POURGATE_REGISTRY_DIR` | `registry` | Directory with the shipped provider YAML files. |
@@ -318,7 +337,7 @@ Found a vulnerability? Please open a private security advisory on GitHub rather 
 - [ ] Semantic and prompt caching
 - [x] Request analytics, JSONL export and Prometheus metrics
 - [ ] OpenTelemetry (OTLP) tracing
-- [ ] PII redaction and per-provider privacy policies
+- [x] PII redaction and per-provider privacy policies
 - [ ] Plugin system for providers, strategies and middleware
 - [ ] Anthropic Messages, embeddings, images and audio endpoints
 - [ ] Desktop app

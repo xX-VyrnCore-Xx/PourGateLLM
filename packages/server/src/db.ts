@@ -68,6 +68,7 @@ const MIGRATIONS: string[] = [
      error TEXT
    );
    CREATE INDEX idx_request_log_ts ON request_log(ts);`,
+  `ALTER TABLE request_log ADD COLUMN redacted INTEGER;`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

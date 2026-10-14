@@ -7,6 +7,7 @@ import type { ProviderEntry } from '@pourgate/shared';
 import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
 import type { KeyStore } from './keys.js';
 import type { Metrics } from './metrics.js';
+import { DEFAULT_PRIVACY, tighten, type PrivacyConfig } from './privacy.js';
 import { observeResponse } from './observe.js';
 import type { RequestLog } from './requestlog.js';
 import { KeyPool } from './keypool.js';
@@ -30,6 +31,8 @@ export interface AppOptions {
   /** Enables the admin API when set. */
   adminPassword?: string;
   secureCookie?: boolean;
+  /** Operator privacy settings: PII masking mode and provider policy. */
+  privacy?: PrivacyConfig;
   /** Request metadata log (SQLite); enables analytics in the admin API. */
   requestLog?: RequestLog;
   /** Prometheus metrics registry; exposed at /metrics when `metricsToken` is also set. */
@@ -146,7 +149,12 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     const startedAt = performance.now();
     const startedWall = Date.now();
     const routed = await routeChat(
-      { registry: getRegistry(), pools: opts.pools, fetch: doFetch },
+      {
+        registry: getRegistry(),
+        pools: opts.pools,
+        fetch: doFetch,
+        privacy: tighten(opts.privacy ?? DEFAULT_PRIVACY, c.req.header('x-pourgate-privacy')),
+      },
       payload,
       payload.model,
       c.req.raw.signal,
@@ -172,6 +180,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
                 ttfbMs,
                 totalMs: f.totalMs,
                 tokens: f.tokens,
+                redacted: routed.headers.has('x-pourgate-redacted') ? Number(routed.headers.get('x-pourgate-redacted')) : null,
                 stream: payload.stream === true,
                 error: f.error,
               });

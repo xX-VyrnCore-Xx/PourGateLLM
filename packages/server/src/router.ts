@@ -1,6 +1,7 @@
 import type { ModelEntry, ProviderEntry, Tier } from '@pourgate/shared';
 import { COMPLEXITY_TIER, TIER_ORDER, analyzePrompt, requiredCapabilities, type Analysis } from './complexity.js';
 import { KeyPool } from './keypool.js';
+import { DEFAULT_PRIVACY, needsRedaction, providerAllowed, redactBody, type PrivacyConfig } from './privacy.js';
 
 export interface Candidate {
   provider: ProviderEntry;
@@ -11,6 +12,8 @@ export interface RouterDeps {
   registry: ProviderEntry[];
   pools: Map<string, KeyPool>;
   fetch: typeof fetch;
+  /** Per-request privacy settings (operator config, possibly tightened by the client). */
+  privacy?: PrivacyConfig;
 }
 
 export const AUTO_MODEL = 'auto';
@@ -79,7 +82,20 @@ export async function routeChat(
   requested: string,
   signal?: AbortSignal,
 ): Promise<Response> {
+  const privacy = deps.privacy ?? DEFAULT_PRIVACY;
   let candidates = listCandidates(deps.registry, requested);
+  if (candidates.length > 0) {
+    const allowed = candidates.filter((c) => providerAllowed(privacy.policy, c.provider));
+    if (allowed.length === 0) {
+      return errorResponse(
+        400,
+        `The privacy policy "${privacy.policy}" excludes every provider that could serve this request`,
+        'invalid_request_error',
+        'privacy_policy',
+      );
+    }
+    candidates = allowed;
+  }
   const virtual = parseVirtual(requested);
   let analysis: Analysis | undefined;
   if (virtual) {
@@ -100,6 +116,7 @@ export async function routeChat(
     return errorResponse(404, `The model '${requested}' does not exist`, 'invalid_request_error', 'model_not_found');
   }
 
+  let redacted: { body: Record<string, unknown>; count: number } | undefined;
   for (const { provider, model } of candidates) {
     const pool = deps.pools.get(provider.provider);
     if (!pool) continue;
@@ -108,12 +125,14 @@ export async function routeChat(
       const key = pool.acquire({ model: model.id, ...model.limits }, tried);
       if (!key) break;
       tried.add(key);
+      const mask = needsRedaction(privacy.pii, provider);
+      if (mask) redacted ??= redactBody(body);
       let res: Response;
       try {
         res = await deps.fetch(`${provider.base_url.replace(/\/$/, '')}/chat/completions`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-          body: JSON.stringify({ ...body, model: model.id }),
+          body: JSON.stringify({ ...(mask ? redacted!.body : body), model: model.id }),
           signal,
         });
       } catch (err) {
@@ -145,6 +164,7 @@ export async function routeChat(
       const headers = new Headers(res.headers);
       headers.set('x-pourgate-provider', provider.provider);
       headers.set('x-pourgate-model', model.id);
+      if (mask) headers.set('x-pourgate-redacted', String(redacted!.count));
       if (analysis) {
         headers.set('x-pourgate-tier', model.tier ?? 'medium');
         if (!virtual?.forced) headers.set('x-pourgate-complexity', analysis.complexity);
