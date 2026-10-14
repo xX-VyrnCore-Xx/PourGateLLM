@@ -10,6 +10,7 @@ import { anthropicError, estimateInputTokens, toOpenAIRequest, validateRequest, 
 import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
 import type { Metrics } from './metrics.js';
+import { newSpanId, newTraceId, parseTraceparent, type Tracer } from './otel.js';
 import { DEFAULT_PRIVACY, tighten, type PrivacyConfig } from './privacy.js';
 import { observeResponse } from './observe.js';
 import type { RequestLog } from './requestlog.js';
@@ -40,6 +41,8 @@ export interface AppOptions {
   scoring?: Scoring;
   /** Eval runner/store, exposed through the admin API. */
   evals?: { runner: EvalRunner; store: EvalStore; strategy: Strategy; tasksPerModel: number; tasks: number };
+  /** OTLP trace exporter; tracing is off when unset. */
+  tracer?: Tracer;
   /** Exact-match response cache; disabled when unset. */
   cache?: ResponseCache;
   /** Request metadata log (SQLite); enables analytics in the admin API. */
@@ -174,12 +177,47 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     const startedWall = Date.now();
     const privacy = tighten(opts.privacy ?? DEFAULT_PRIVACY, c.req.header('x-pourgate-privacy'));
 
+    // Tracing: continue the caller's trace when it sent a valid W3C traceparent.
+    const tracer = opts.tracer;
+    const parent = parseTraceparent(c.req.header('traceparent'));
+    const traceId = parent?.traceId ?? newTraceId();
+    const spanId = newSpanId();
+    const tag = (r: Response): Response => {
+      if (tracer) r.headers.set('x-pourgate-trace-id', traceId);
+      return r;
+    };
+    const route = endpoint === 'chat' ? '/v1/chat/completions' : '/v1/embeddings';
+
     const record = (r: { routed: Response; totalMs: number; ttfbMs: number; tokens: number | null; error: string | null; cache: 'hit' | 'miss' | null }) => {
       const provider = r.routed.headers.get('x-pourgate-provider');
       const model = r.routed.headers.get('x-pourgate-model');
       const complexity = r.routed.headers.get('x-pourgate-complexity');
       opts.metrics?.observe({ provider, model, status: r.routed.status, complexity, seconds: r.totalMs / 1000, tokens: r.tokens });
       if (r.cache) opts.metrics?.cache(r.cache);
+      tracer?.record({
+        traceId,
+        spanId,
+        parentSpanId: parent?.spanId,
+        name: `POST ${route}`,
+        kind: 2,
+        startMs: startedWall,
+        endMs: startedWall + r.totalMs,
+        attributes: {
+          'http.request.method': 'POST',
+          'http.route': route,
+          'http.response.status_code': r.routed.status,
+          'gen_ai.request.model': payload.model as string,
+          'gen_ai.response.model': model,
+          'gen_ai.system': provider,
+          'pourgate.tier': r.routed.headers.get('x-pourgate-tier'),
+          'pourgate.complexity': complexity,
+          'pourgate.tokens': r.tokens,
+          'pourgate.cache': r.cache,
+          'pourgate.client_token_id': clientId ?? null,
+          'pourgate.redacted_items': r.routed.headers.has('x-pourgate-redacted') ? Number(r.routed.headers.get('x-pourgate-redacted')) : null,
+        },
+        error: r.error ?? undefined,
+      });
       try {
         opts.requestLog?.insert({
           ts: startedWall,
@@ -222,12 +260,32 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         const hitRes = new Response(hit.body, { status: 200, headers });
         const ms = performance.now() - startedAt;
         record({ routed: hitRes, totalMs: ms, ttfbMs: ms, tokens: null, error: null, cache: 'hit' });
-        return hitRes;
+        return tag(hitRes);
       }
     }
 
     const routed = await routeChat(
-      { registry: getRegistry(), pools: opts.pools, fetch: doFetch, privacy, scoring: opts.scoring },
+      {
+        registry: getRegistry(),
+        pools: opts.pools,
+        fetch: doFetch,
+        privacy,
+        scoring: opts.scoring,
+        onAttempt: tracer
+          ? (a) =>
+              tracer.record({
+                traceId,
+                spanId: newSpanId(),
+                parentSpanId: spanId,
+                name: `upstream ${a.provider}`,
+                kind: 3,
+                startMs: a.startMs,
+                endMs: a.endMs,
+                attributes: { 'gen_ai.system': a.provider, 'gen_ai.request.model': a.model, 'http.response.status_code': a.status },
+                error: a.status === null ? 'network_error' : a.status >= 400 ? `http_${a.status}` : undefined,
+              })
+          : undefined,
+      },
       payload,
       payload.model as string,
       c.req.raw.signal,
@@ -235,7 +293,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     );
     const ttfbMs = performance.now() - startedAt;
     const res =
-      opts.requestLog || opts.metrics || cacheKey
+      opts.requestLog || opts.metrics || tracer || cacheKey
         ? observeResponse(routed, startedAt, (f) => {
             if (cacheKey && cache && routed.status === 200 && f.body) {
               try {
@@ -266,7 +324,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         })
         .catch(() => {});
     }
-    return res;
+    return tag(res);
   };
 
   app.post('/v1/chat/completions', (c) => handle(c, 'chat'));

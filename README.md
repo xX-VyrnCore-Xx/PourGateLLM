@@ -272,6 +272,7 @@ The **Analytics** tab shows request volume and errors over time, tokens, and p50
 - **Privacy:** only metadata is logged (time, token id, model, provider, status, latency, tokens, complexity). Prompts and completions are never stored. Retention defaults to 30 days.
 - **Latency** is measured until the response body ends; `ttfb_ms` in the log is the time to the upstream response headers.
 - **Tokens** come from the provider's `usage` on non-streaming responses.
+- **Tracing (OpenTelemetry):** set `OTEL_EXPORTER_OTLP_ENDPOINT` to export one server span per request plus one client span per upstream attempt (so you can see failover: which key/provider answered 429, which one succeeded). Spans carry `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.system`, status, tokens, tier, complexity and cache result, **never prompts or completions**. A valid W3C `traceparent` header continues the caller's trace, and every response includes `x-pourgate-trace-id`. Export is batched in the background and can never slow down or fail a request (spans are dropped if the collector is down).
 - **Prometheus:** set `POURGATE_METRICS_TOKEN` and scrape `GET /metrics` with `Authorization: Bearer <token>` (`pourgate_requests_total`, `pourgate_request_duration_seconds`, `pourgate_tokens_total`, `pourgate_keys`, `pourgate_keys_cooling`).
 
 ## ⚙️ Configuration
@@ -297,6 +298,7 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_PII_MODE` | `off` | `off`, `training` (mask for providers that may train on prompts) or `all`. |
 | `POURGATE_PRIVACY_POLICY` | `any` | `any`, `no-training` (skip providers flagged `trains_on_prompts: true`) or `strict` (only providers flagged `false`). |
 | `POURGATE_METRICS_TOKEN` | | Enables `GET /metrics` (Prometheus), protected by this bearer token. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | | Enables OTLP/HTTP trace export (e.g. `http://collector:4318`). `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_SERVICE_NAME` are honored too. |
 | `POURGATE_LOG_RETENTION_DAYS` | `30` | How long request metadata is kept. |
 | `POURGATE_REGISTRY_DIR` | `registry` | Directory with the shipped provider YAML files. |
 | `POURGATE_OVERRIDES_DIR` | `overrides` | Local YAML files that override or extend the registry. |
@@ -387,7 +389,7 @@ Found a vulnerability? Please open a private security advisory on GitHub rather 
 - [x] Exact-match response cache
 - [ ] Semantic cache (embedding similarity)
 - [x] Request analytics, JSONL export and Prometheus metrics
-- [ ] OpenTelemetry (OTLP) tracing
+- [x] OpenTelemetry (OTLP) tracing
 - [x] PII redaction and per-provider privacy policies
 - [ ] Plugin system for providers, strategies and middleware
 - [x] Embeddings endpoint
