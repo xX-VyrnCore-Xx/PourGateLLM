@@ -77,7 +77,10 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
           <ul className="space-y-1 text-sm">
             {p.models.map((m) => (
               <li key={m.id} className="flex flex-wrap items-center justify-between gap-2">
-                <code>{m.id}</code>
+                <span className="flex items-center gap-2">
+                  <code>{m.id}</code>
+                  {m.tier && <Badge>{m.tier}</Badge>}
+                </span>
                 <span className="text-xs text-muted">
                   {m.usageToday.requests > 0 && `${m.usageToday.requests} req / ${m.usageToday.tokens} tok · `}
                   {m.limits.rpm ? `${m.limits.rpm} rpm` : ''}

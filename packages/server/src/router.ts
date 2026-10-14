@@ -1,4 +1,5 @@
-import type { ModelEntry, ProviderEntry } from '@pourgate/shared';
+import type { ModelEntry, ProviderEntry, Tier } from '@pourgate/shared';
+import { COMPLEXITY_TIER, TIER_ORDER, analyzePrompt, requiredCapabilities, type Analysis } from './complexity.js';
 import { KeyPool } from './keypool.js';
 
 export interface Candidate {
@@ -13,6 +14,17 @@ export interface RouterDeps {
 }
 
 export const AUTO_MODEL = 'auto';
+const FORCED_TIERS: Tier[] = ['small', 'medium', 'large'];
+
+/** Virtual model ids: `auto` (classify the prompt) and `auto:small|medium|large` (force a tier first). */
+export const VIRTUAL_MODELS = [AUTO_MODEL, ...FORCED_TIERS.map((t) => `${AUTO_MODEL}:${t}`)];
+
+/** `undefined` when `requested` is not a virtual model; `null` tier means classify automatically. */
+export function parseVirtual(requested: string): { forced: Tier | null } | undefined {
+  if (requested === AUTO_MODEL) return { forced: null };
+  const m = requested.match(/^auto:(small|medium|large)$/);
+  return m ? { forced: m[1] as Tier } : undefined;
+}
 
 export function listCandidates(registry: ProviderEntry[], requested: string): Candidate[] {
   const all = registry.flatMap((provider) =>
@@ -20,7 +32,29 @@ export function listCandidates(registry: ProviderEntry[], requested: string): Ca
       .filter((m) => m.capabilities.includes('chat'))
       .map((model) => ({ provider, model })),
   );
-  return requested === AUTO_MODEL ? all : all.filter((c) => c.model.id === requested);
+  return parseVirtual(requested) ? all : all.filter((c) => c.model.id === requested);
+}
+
+/**
+ * Orders (and filters) candidates for a virtual model: drop models that cannot serve the request
+ * (missing capability, context window too small), then prefer the wanted tier, falling back to the
+ * others. Within a tier, the model that has served the fewest requests today goes first.
+ */
+export function rankCandidates(
+  candidates: Candidate[],
+  preferred: Tier,
+  analysis: Analysis,
+  usageToday: (c: Candidate) => number,
+): Candidate[] {
+  const caps = requiredCapabilities(analysis.needs);
+  const order = TIER_ORDER[preferred];
+  const tierRank = (c: Candidate) => order.indexOf(c.model.tier ?? 'medium');
+  return candidates
+    .filter((c) => caps.every((cap) => c.model.capabilities.includes(cap)))
+    .filter((c) => c.model.context === undefined || analysis.promptTokens < c.model.context)
+    .map((c, i) => ({ c, i, usage: usageToday(c) }))
+    .sort((a, b) => tierRank(a.c) - tierRank(b.c) || a.usage - b.usage || a.i - b.i)
+    .map((x) => x.c);
 }
 
 const MAX_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -45,7 +79,23 @@ export async function routeChat(
   requested: string,
   signal?: AbortSignal,
 ): Promise<Response> {
-  const candidates = listCandidates(deps.registry, requested);
+  let candidates = listCandidates(deps.registry, requested);
+  const virtual = parseVirtual(requested);
+  let analysis: Analysis | undefined;
+  if (virtual) {
+    analysis = analyzePrompt(body);
+    const preferred = virtual.forced ?? COMPLEXITY_TIER[analysis.complexity];
+    const total = candidates.length;
+    candidates = rankCandidates(candidates, preferred, analysis, (c) => deps.pools.get(c.provider.provider)?.usageToday(c.model.id).requests ?? 0);
+    if (candidates.length === 0 && total > 0) {
+      return errorResponse(
+        400,
+        'No configured model supports this request (required capabilities or context length)',
+        'invalid_request_error',
+        'no_capable_model',
+      );
+    }
+  }
   if (candidates.length === 0) {
     return errorResponse(404, `The model '${requested}' does not exist`, 'invalid_request_error', 'model_not_found');
   }
@@ -95,6 +145,10 @@ export async function routeChat(
       const headers = new Headers(res.headers);
       headers.set('x-pourgate-provider', provider.provider);
       headers.set('x-pourgate-model', model.id);
+      if (analysis) {
+        headers.set('x-pourgate-tier', model.tier ?? 'medium');
+        if (!virtual?.forced) headers.set('x-pourgate-complexity', analysis.complexity);
+      }
       return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
     }
   }

@@ -1,7 +1,7 @@
 # PourGateLLM — Documento di design (v0.1)
 
 > Gateway self-hosted che unifica i piani gratuiti dei provider LLM dietro un'unica API OpenAI-compatibile.
-> Ispirato a [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi), con catalogo aperto, routing basato su misure reali e multi-utente.
+> Catalogo aperto, routing basato su misure reali, token per client e quote.
 
 ## 1. Decisioni prese
 
@@ -19,16 +19,16 @@
 | Extra | Cache semantica/prompt cache, OpenTelemetry, PII redaction, plugin system |
 | Licenza | MIT, nessun paywall |
 
-## 2. Differenziatori rispetto a FreeLLMAPI
+## 2. Principi di design
 
-| Punto debole originale | Risposta di PourGateLLM |
+| Principio | Come si traduce |
 |---|---|
-| Aggiornamenti catalogo in giornata a pagamento (feed firmato, lag 30 gg per i free) | Registry **aperto** nel repo (`registry/`), sync da GitHub, PR della community, CI di validazione |
-| Quote/limiti dichiarati, non verificati | **Probing**: il gateway rileva limiti reali da header e 429 e segnala drift rispetto al registry |
-| Ranking basato su metriche live generiche | **Eval periodiche** (mini-benchmark) per qualità, latenza, affidabilità per modello |
-| Single-user | Utenti, token per client, quote e budget per token, audit log |
-| Solo routing per strategia | Routing per **complessità del prompt** (classificatore leggero) |
-| Privacy non gestita | **PII redaction** e policy per provider (es. "questo provider addestra sui prompt") |
+| Catalogo aperto | Registry in YAML nel repo (`registry/`), sync da bundle, PR della community, CI di validazione |
+| Dati verificabili | **Probing** (pianificato): il gateway rileva i limiti reali da header e 429 e segnala drift rispetto al registry |
+| Ranking basato su misure | **Eval periodiche** (pianificate): mini-benchmark per qualità, latenza, affidabilità per modello |
+| Multi-utente | Token per client con rate limit, quota giornaliera e scadenza; audit log (pianificato) |
+| Costo proporzionato alla richiesta | Routing per **complessità del prompt**: classificatore euristico a costo zero di quota (implementato) |
+| Privacy esplicita | **PII redaction** e policy per provider (pianificate), es. "questo provider addestra sui prompt" |
 
 ## 3. Architettura
 
@@ -87,7 +87,7 @@ models:
 2. **Candidati**: modelli con almeno una chiave non in cooldown e quota residua.
 3. **Punteggio**: combinazione pesata di qualità (eval), velocità (p50/TTFT), affidabilità (tasso errori), quota residua.
 4. **Strategie**: `quality`, `speed`, `quota`, `balanced`, profili nominati (`auto:coding`, `auto:vision`).
-5. **Complessità**: classificatore leggero (euristiche + piccolo modello gratuito) → `easy` ai modelli piccoli, `hard` ai migliori.
+5. **Complessità** (implementato, `packages/server/src/complexity.ts`): classificatore euristico deterministico che non consuma quota. Somma segnali (lunghezza, codice, termini di ragionamento/ingegneria EN+IT, matematica, profondità della conversazione, tool, output strutturato, output lungo, `reasoning_effort`) in un punteggio → `easy`/`medium`/`hard` → tier `small`/`medium`/`large` (campo `tier` del registry). Il tier è una **preferenza**: gli altri restano come fallback. Dentro un tier vince il modello meno usato oggi. Si filtrano i modelli senza le capability richieste (tools, JSON, vision) o con contesto troppo piccolo. Modelli virtuali: `auto` (classifica) e `auto:small|medium|large` (forza il tier). Header di risposta: `x-pourgate-complexity`, `x-pourgate-tier`. Evoluzione possibile: classificatore con un piccolo modello gratuito per i casi ambigui.
 6. **Failover**: su 429/5xx cooldown + rotazione chiave + modello successivo; sticky di conversazione opzionale.
 
 ## 6. Sicurezza e multi-utente
@@ -112,7 +112,7 @@ models:
 | **MVP** (fatto: vedi README) | Monorepo, `/v1/chat/completions` + `/v1/models`, 5 provider (Groq, Gemini, Cerebras, Mistral, OpenRouter), key pool cifrato, limiter RPM/RPD, failover, SQLite, CLI base, Docker |
 | **v0.2** | Registry aperto + sync + CI, dashboard (chiavi, modelli, playground), token per client |
 | **v0.3** | Eval periodiche + scoring, strategie e profili, analytics |
-| **v0.4** | Routing per complessità, cache, PII redaction, OpenTelemetry |
+| **v0.4** | Cache, PII redaction, OpenTelemetry (routing per complessità: fatto) |
 | **v1.0** | Plugin system, app desktop, hardening sicurezza, documentazione |
 | **Dopo** | Anthropic Messages, embeddings/immagini/audio, Responses API, MCP server |
 

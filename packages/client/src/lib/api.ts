@@ -41,6 +41,7 @@ export interface ProviderRow {
   trainsOnPrompts: boolean | null;
   models: {
     id: string;
+    tier: 'small' | 'medium' | 'large' | null;
     capabilities: string[];
     context: number | null;
     limits: Record<string, number>;

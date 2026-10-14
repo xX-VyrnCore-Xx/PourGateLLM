@@ -9,7 +9,7 @@ import type { KeyStore } from './keys.js';
 import { KeyPool } from './keypool.js';
 import type { PoolManager } from './pools.js';
 import { SlidingWindow } from './ratelimit.js';
-import { AUTO_MODEL, errorResponse, routeChat } from './router.js';
+import { VIRTUAL_MODELS, errorResponse, routeChat } from './router.js';
 import type { TokenRecord, TokenStore } from './tokens.js';
 
 export interface AppOptions {
@@ -71,7 +71,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
 
   app.get('/v1/models', (c) => {
     const data = [
-      { id: AUTO_MODEL, object: 'model', created: 0, owned_by: 'pourgate' },
+      ...VIRTUAL_MODELS.map((id) => ({ id, object: 'model', created: 0, owned_by: 'pourgate' })),
       ...getRegistry().flatMap((p) =>
         p.models.map((m) => ({ id: m.id, object: 'model', created: 0, owned_by: p.provider })),
       ),

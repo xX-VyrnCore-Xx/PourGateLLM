@@ -49,6 +49,7 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 | | |
 |---|---|
 | 🔌 **OpenAI-compatible API** | `GET /v1/models` and `POST /v1/chat/completions` with streaming passthrough. Use `"model": "auto"` or a specific model id. |
+| 🧠 **Complexity routing** | `"model": "auto"` classifies each prompt (size, code, reasoning, tools…) and tries small, fast models for easy questions and the strongest ones for hard tasks, with automatic fallback to the other tiers. |
 | 🔁 **Smart failover** | On `429` / `5xx` / network errors it rotates to the next key, then the next model, honoring `Retry-After`. |
 | 📊 **Real quota accounting** | `rpm`, `rpd`, `tpm`, `tpd` enforced per key *and* model. Daily counters and cooldowns persist in SQLite. |
 | 🔑 **Per-client tokens** | Create tokens with their own rate limit, daily quota and expiry. Stored as SHA-256 hashes, revocable any time. |
@@ -136,6 +137,8 @@ console.log(reply.choices[0]?.message.content);
 
 Every response carries `x-pourgate-provider` and `x-pourgate-model` headers so you can see who answered.
 
+See [Complexity routing](#-complexity-routing) for how `auto` picks a model.
+
 ## 🧭 How it works
 
 ```mermaid
@@ -163,6 +166,29 @@ flowchart LR
 2. The **router** lists the models able to serve it, from the registry, and tries them in order.
 3. The **key pool** picks the next key that still has budget for that model, so limits are respected per key *and* model.
 4. If the provider answers `429`/`5xx`, that key cools down (persisted) and the next key or model takes over. Successful responses, including streams, are passed through untouched.
+
+## 🧠 Complexity routing
+
+`"model": "auto"` looks at each request and decides how much model it deserves, **without spending any provider quota** (it is a small deterministic classifier, not another LLM call).
+
+| Signal | Examples |
+|---|---|
+| Size | prompt length, very long last message, long conversations |
+| Content | code, math, reasoning/engineering wording in English and Italian (*analyze*, *debug*, *prove*, *analizza*, *ottimizza*…) |
+| Request shape | tool use, strict JSON schema, large `max_tokens`, `reasoning_effort` |
+| Simplicity | short greetings, definitions, translations lower the score |
+
+The score maps to `easy → small`, `medium → medium`, `hard → large`, using the `tier` hint of each model in the [registry](registry). The tier is a **preference, not a filter**: if the preferred tier has no budget left, the next ones take over. Within a tier the model that served the fewest requests today goes first, which spreads load across providers.
+
+Models that cannot serve the request are skipped (missing `tools` / `json_mode` / `vision` capability, or a context window that is too small); if none can, you get a clear `400 no_capable_model`.
+
+| Model id | Behavior |
+|---|---|
+| `auto` | Classify the prompt, then pick the tier |
+| `auto:small` · `auto:medium` · `auto:large` | Force the tier to try first |
+| any registry model id | Use exactly that model (no classification) |
+
+Responses include `x-pourgate-complexity` (for `auto`) and `x-pourgate-tier` so you can see the decision. Tiers in the registry are hints (`tier: small|medium|large`); adjust them with local overrides (`POURGATE_OVERRIDES_DIR`) if you disagree.
 
 ## 🖼️ Dashboard
 
@@ -271,7 +297,7 @@ Found a vulnerability? Please open a private security advisory on GitHub rather 
 - [x] Open registry with signed sync and overrides
 - [x] Docker image and Compose
 - [ ] Periodic evals to rank models on real quality, latency and reliability
-- [ ] Routing by prompt complexity
+- [x] Routing by prompt complexity (heuristic classifier)
 - [ ] Semantic and prompt caching
 - [ ] OpenTelemetry metrics and log export
 - [ ] PII redaction and per-provider privacy policies
@@ -303,4 +329,4 @@ Contributions are welcome, especially **registry fixes and new providers**. Open
 
 ## 📄 License
 
-[MIT](LICENSE). Inspired by [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi).
+[MIT](LICENSE)

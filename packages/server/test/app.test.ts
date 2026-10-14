@@ -59,7 +59,7 @@ describe('gateway', () => {
     const app = setup(vi.fn());
     const res = await app.request('/v1/models', { headers: auth });
     const json = (await res.json()) as { data: { id: string }[] };
-    expect(json.data.map((m) => m.id)).toEqual(['auto', 'm1']);
+    expect(json.data.map((m) => m.id)).toEqual(['auto', 'auto:small', 'auto:medium', 'auto:large', 'm1']);
   });
 
   it('proxies a chat completion with the provider key', async () => {
