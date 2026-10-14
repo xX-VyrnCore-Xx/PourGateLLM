@@ -6,6 +6,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import type { ProviderEntry } from '@pourgate/shared';
 import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
 import type { KeyStore } from './keys.js';
+import type { ResponseCache } from './cache.js';
 import type { Metrics } from './metrics.js';
 import { DEFAULT_PRIVACY, tighten, type PrivacyConfig } from './privacy.js';
 import { observeResponse } from './observe.js';
@@ -33,6 +34,8 @@ export interface AppOptions {
   secureCookie?: boolean;
   /** Operator privacy settings: PII masking mode and provider policy. */
   privacy?: PrivacyConfig;
+  /** Exact-match response cache; disabled when unset. */
+  cache?: ResponseCache;
   /** Request metadata log (SQLite); enables analytics in the admin API. */
   requestLog?: RequestLog;
   /** Prometheus metrics registry; exposed at /metrics when `metricsToken` is also set. */
@@ -148,45 +151,84 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
 
     const startedAt = performance.now();
     const startedWall = Date.now();
+    const privacy = tighten(opts.privacy ?? DEFAULT_PRIVACY, c.req.header('x-pourgate-privacy'));
+
+    const record = (r: { routed: Response; totalMs: number; ttfbMs: number; tokens: number | null; error: string | null; cache: 'hit' | 'miss' | null }) => {
+      const provider = r.routed.headers.get('x-pourgate-provider');
+      const model = r.routed.headers.get('x-pourgate-model');
+      const complexity = r.routed.headers.get('x-pourgate-complexity');
+      opts.metrics?.observe({ provider, model, status: r.routed.status, complexity, seconds: r.totalMs / 1000, tokens: r.tokens });
+      if (r.cache) opts.metrics?.cache(r.cache);
+      try {
+        opts.requestLog?.insert({
+          ts: startedWall,
+          tokenId: clientId ?? null,
+          requested: payload.model as string,
+          provider,
+          model,
+          tier: r.routed.headers.get('x-pourgate-tier'),
+          complexity,
+          status: r.routed.status,
+          ttfbMs: r.ttfbMs,
+          totalMs: r.totalMs,
+          tokens: r.tokens,
+          redacted: r.routed.headers.has('x-pourgate-redacted') ? Number(r.routed.headers.get('x-pourgate-redacted')) : null,
+          cache: r.cache,
+          stream: payload.stream === true,
+          error: r.error,
+        });
+      } catch (err) {
+        console.error('[requestlog] insert failed:', err instanceof Error ? err.message : err);
+      }
+    };
+
+    // Exact-match response cache (opt-in): scoped per client and privacy settings, bypassable per request.
+    const cache = opts.cache;
+    const cacheControl = c.req.header('cache-control')?.toLowerCase() ?? '';
+    const bypass =
+      /\b(no-cache|no-store)\b/.test(cacheControl) ||
+      ['bypass', 'no-store', 'no-cache'].includes((c.req.header('x-pourgate-cache') ?? '').toLowerCase());
+    let cacheKey: string | undefined;
+    if (cache && !bypass && cache.eligible(payload)) {
+      cacheKey = cache.key(clientId !== undefined ? `client:${clientId}` : 'env', payload, `${privacy.pii}|${privacy.policy}`);
+      const hit = cache.get(cacheKey);
+      if (hit) {
+        const headers = new Headers({ 'content-type': 'application/json', 'x-pourgate-cache': 'hit', age: String(Math.floor(hit.ageMs / 1000)) });
+        if (hit.provider) headers.set('x-pourgate-provider', hit.provider);
+        if (hit.model) headers.set('x-pourgate-model', hit.model);
+        if (hit.tier) headers.set('x-pourgate-tier', hit.tier);
+        if (hit.complexity) headers.set('x-pourgate-complexity', hit.complexity);
+        const hitRes = new Response(hit.body, { status: 200, headers });
+        const ms = performance.now() - startedAt;
+        record({ routed: hitRes, totalMs: ms, ttfbMs: ms, tokens: null, error: null, cache: 'hit' });
+        return hitRes;
+      }
+    }
+
     const routed = await routeChat(
-      {
-        registry: getRegistry(),
-        pools: opts.pools,
-        fetch: doFetch,
-        privacy: tighten(opts.privacy ?? DEFAULT_PRIVACY, c.req.header('x-pourgate-privacy')),
-      },
+      { registry: getRegistry(), pools: opts.pools, fetch: doFetch, privacy },
       payload,
       payload.model,
       c.req.raw.signal,
     );
     const ttfbMs = performance.now() - startedAt;
     const res =
-      opts.requestLog || opts.metrics
+      opts.requestLog || opts.metrics || cacheKey
         ? observeResponse(routed, startedAt, (f) => {
-            const provider = routed.headers.get('x-pourgate-provider');
-            const model = routed.headers.get('x-pourgate-model');
-            const complexity = routed.headers.get('x-pourgate-complexity');
-            opts.metrics?.observe({ provider, model, status: routed.status, complexity, seconds: f.totalMs / 1000, tokens: f.tokens });
-            try {
-              opts.requestLog?.insert({
-                ts: startedWall,
-                tokenId: clientId ?? null,
-                requested: payload.model as string,
-                provider,
-                model,
-                tier: routed.headers.get('x-pourgate-tier'),
-                complexity,
-                status: routed.status,
-                ttfbMs,
-                totalMs: f.totalMs,
-                tokens: f.tokens,
-                redacted: routed.headers.has('x-pourgate-redacted') ? Number(routed.headers.get('x-pourgate-redacted')) : null,
-                stream: payload.stream === true,
-                error: f.error,
-              });
-            } catch (err) {
-              console.error('[requestlog] insert failed:', err instanceof Error ? err.message : err);
+            if (cacheKey && cache && routed.status === 200 && f.body) {
+              try {
+                cache.set(cacheKey, {
+                  body: f.body.toString('utf8'),
+                  provider: routed.headers.get('x-pourgate-provider'),
+                  model: routed.headers.get('x-pourgate-model'),
+                  tier: routed.headers.get('x-pourgate-tier'),
+                  complexity: routed.headers.get('x-pourgate-complexity'),
+                });
+              } catch (err) {
+                console.error('[cache] store failed:', err instanceof Error ? err.message : err);
+              }
             }
+            record({ routed, totalMs: f.totalMs, ttfbMs, tokens: f.tokens, error: f.error, cache: cacheKey ? 'miss' : null });
           })
         : routed;
 
@@ -217,6 +259,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         keyStore: opts.keyStore,
         poolManager: opts.poolManager,
         requestLog: opts.requestLog,
+        cache: opts.cache,
         fetch: opts.fetch,
         secureCookie: opts.secureCookie,
       }),

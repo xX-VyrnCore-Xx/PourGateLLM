@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { ApiError, api, type Analytics as Data } from '../lib/api';
 import { useT, type Key } from '../lib/i18n';
@@ -39,6 +40,10 @@ export function Analytics({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [range, setRange] = useState('24h');
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cache, setCache] = useState<{ enabled: boolean; entries?: number; hits?: number; bytes?: number } | null>(null);
+
+  const loadCache = () => api.cache().then(setCache).catch(() => setCache(null));
+  useEffect(() => void loadCache(), []);
 
   useEffect(() => {
     setError(null);
@@ -53,6 +58,7 @@ export function Analytics({ onUnauthorized }: { onUnauthorized: () => void }) {
         ['requests', String(data.summary.requests)],
         ['errorRate', pct(data.summary.errorRate)],
         ['tokensUsed', data.summary.tokens.toLocaleString()],
+        ...(data.summary.cacheHits > 0 ? ([['cacheHits', String(data.summary.cacheHits)]] as [Key, string][]) : []),
         ['latencyP50', ms(data.summary.p50Ms)],
         ['latencyP95', ms(data.summary.p95Ms)],
       ]
@@ -78,9 +84,22 @@ export function Analytics({ onUnauthorized }: { onUnauthorized: () => void }) {
         </a>
       </div>
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      {cache?.enabled && (
+        <Card className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm">
+            <span className="font-medium">{t('responseCache')}</span>{' '}
+            <span className="text-muted">
+              {cache.entries} {t('cacheEntries')} · {cache.hits} {t('cacheStoredHits')} · {((cache.bytes ?? 0) / 1024).toFixed(1)} KB
+            </span>
+          </p>
+          <Button variant="outline" onClick={() => api.clearCache().then(loadCache)}>
+            {t('clearCache')}
+          </Button>
+        </Card>
+      )}
       {data && (
         <>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             {kpis.map(([k, v]) => (
               <Card key={k}>
                 <p className="text-xs text-muted">{t(k)}</p>

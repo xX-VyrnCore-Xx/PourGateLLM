@@ -69,6 +69,20 @@ const MIGRATIONS: string[] = [
    );
    CREATE INDEX idx_request_log_ts ON request_log(ts);`,
   `ALTER TABLE request_log ADD COLUMN redacted INTEGER;`,
+  `ALTER TABLE request_log ADD COLUMN cache TEXT;
+   CREATE TABLE response_cache (
+     key TEXT PRIMARY KEY,
+     created_at INTEGER NOT NULL,
+     expires_at INTEGER NOT NULL,
+     hits INTEGER NOT NULL DEFAULT 0,
+     body TEXT NOT NULL,
+     provider TEXT,
+     model TEXT,
+     tier TEXT,
+     complexity TEXT,
+     size INTEGER NOT NULL
+   );
+   CREATE INDEX idx_response_cache_created ON response_cache(created_at);`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

@@ -24,7 +24,12 @@ export interface Observation {
 export class Metrics {
   private readonly requests = new Map<string, { labels: Record<string, string>; n: number }>();
   private readonly tokens = new Map<string, { labels: Record<string, string>; n: number }>();
+  private readonly cacheResults = new Map<string, { labels: Record<string, string>; n: number }>();
   private readonly hist = new Map<string, { labels: Record<string, string>; counts: number[]; sum: number; n: number }>();
+
+  cache(result: 'hit' | 'miss'): void {
+    bump(this.cacheResults, { result }, 1);
+  }
 
   observe(o: Observation): void {
     const provider = o.provider ?? 'none';
@@ -46,6 +51,8 @@ export class Metrics {
     const out: string[] = [];
     out.push('# HELP pourgate_requests_total Proxied chat requests.', '# TYPE pourgate_requests_total counter');
     for (const { labels, n } of this.requests.values()) out.push(`pourgate_requests_total${labelStr(labels)} ${n}`);
+    out.push('# HELP pourgate_cache_requests_total Cacheable requests by result.', '# TYPE pourgate_cache_requests_total counter');
+    for (const { labels, n } of this.cacheResults.values()) out.push(`pourgate_cache_requests_total${labelStr(labels)} ${n}`);
     out.push('# HELP pourgate_tokens_total Tokens reported by providers (non-streaming).', '# TYPE pourgate_tokens_total counter');
     for (const { labels, n } of this.tokens.values()) out.push(`pourgate_tokens_total${labelStr(labels)} ${n}`);
     out.push('# HELP pourgate_request_duration_seconds Time to complete a proxied request.', '# TYPE pourgate_request_duration_seconds histogram');

@@ -76,6 +76,7 @@ const entry = (over: Partial<LogEntry> = {}): LogEntry => ({
   totalMs: 100,
   tokens: 10,
   redacted: null,
+  cache: null,
   stream: false,
   error: null,
   ...over,
