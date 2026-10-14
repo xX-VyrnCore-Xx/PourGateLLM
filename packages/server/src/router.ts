@@ -17,6 +17,17 @@ export interface RouterDeps {
   privacy?: PrivacyConfig;
   /** Measured model quality, used to order models inside a tier. */
   scoring?: Scoring;
+  /** Called after each upstream attempt (for tracing); never receives prompts. */
+  onAttempt?: (a: AttemptInfo) => void;
+}
+
+export interface AttemptInfo {
+  provider: string;
+  model: string;
+  startMs: number;
+  endMs: number;
+  /** HTTP status, or null for a network error / timeout. */
+  status: number | null;
 }
 
 export interface Scoring {
@@ -155,6 +166,8 @@ export async function routeChat(
       const mask = needsRedaction(privacy.pii, provider);
       if (mask) redacted ??= endpoint === 'chat' ? redactBody(body) : redactEmbeddingBody(body);
       let res: Response;
+      const attemptStart = Date.now();
+      const attemptT0 = performance.now();
       try {
         res = await deps.fetch(`${provider.base_url.replace(/\/$/, '')}${ENDPOINT_PATH[endpoint]}`, {
           method: 'POST',
@@ -163,10 +176,12 @@ export async function routeChat(
           signal,
         });
       } catch (err) {
+        deps.onAttempt?.({ provider: provider.provider, model: model.id, startMs: attemptStart, endMs: attemptStart + (performance.now() - attemptT0), status: null });
         if (signal?.aborted) throw err;
         pool.cooldown(key, 10_000);
         continue;
       }
+      deps.onAttempt?.({ provider: provider.provider, model: model.id, startMs: attemptStart, endMs: attemptStart + (performance.now() - attemptT0), status: res.status });
       if (res.status === 429) {
         pool.cooldown(key, parseRetryAfter(res, 60_000));
         await res.body?.cancel();

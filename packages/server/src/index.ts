@@ -12,6 +12,7 @@ import { ResponseCache, parseCacheMode } from './cache.js';
 import { EvalRunner, EvalStore, loadSuite, parseStrategy, type ModelScore } from './evals.js';
 import { Metrics } from './metrics.js';
 import { parsePiiMode, parsePolicy } from './privacy.js';
+import { Tracer, parseHeaders } from './otel.js';
 import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
 import { SqliteUsage, makeFingerprint, pruneUsage } from './usage.js';
@@ -38,6 +39,10 @@ const poolManager = new PoolManager(keyStore, process.env, console.warn, (provid
   fingerprint,
 }));
 const requestLog = new RequestLog(db);
+const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+const tracer = otlpEndpoint
+  ? new Tracer({ endpoint: otlpEndpoint, headers: parseHeaders(process.env.OTEL_EXPORTER_OTLP_HEADERS), serviceName: process.env.OTEL_SERVICE_NAME || 'pourgatellm' })
+  : undefined;
 const cacheTtl = Number(process.env.POURGATE_CACHE_TTL_SECONDS ?? 0);
 let cache: ResponseCache | undefined;
 if (cacheTtl > 0) {
@@ -135,6 +140,7 @@ serve(
       keyStore,
       poolManager,
       privacy,
+      tracer,
       scoring,
       evals,
       cache,

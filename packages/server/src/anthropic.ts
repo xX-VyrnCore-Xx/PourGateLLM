@@ -310,7 +310,7 @@ export async function wrapResponse(res: Response, requestedModel: string, inputE
     return out;
   }
   const headers = new Headers();
-  for (const h of ['x-pourgate-provider', 'x-pourgate-model', 'x-pourgate-tier', 'x-pourgate-complexity', 'x-pourgate-cache', 'x-pourgate-redacted', 'age']) {
+  for (const h of ['x-pourgate-provider', 'x-pourgate-model', 'x-pourgate-tier', 'x-pourgate-complexity', 'x-pourgate-cache', 'x-pourgate-redacted', 'x-pourgate-trace-id', 'age']) {
     const v = res.headers.get(h);
     if (v) headers.set(h, v);
   }
