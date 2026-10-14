@@ -6,6 +6,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import type { ProviderEntry } from '@pourgate/shared';
 import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
 import type { KeyStore } from './keys.js';
+import { anthropicError, estimateInputTokens, toOpenAIRequest, validateRequest, wrapResponse } from './anthropic.js';
 import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
 import type { Metrics } from './metrics.js';
@@ -101,9 +102,12 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
 
   app.use('/v1/*', async (c, next) => {
     const header = c.req.header('authorization') ?? '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    // OpenAI clients send `Authorization: Bearer`; Anthropic SDKs send `x-api-key`.
+    const token = header.startsWith('Bearer ') ? header.slice(7) : (c.req.header('x-api-key') ?? '');
     const invalid = () =>
-      errorResponse(401, 'Invalid or missing API token', 'invalid_request_error', 'invalid_api_key');
+      c.req.path.startsWith('/v1/messages')
+        ? anthropicError(401, 'Invalid or missing API key')
+        : errorResponse(401, 'Invalid or missing API token', 'invalid_request_error', 'invalid_api_key');
     if (!token) return invalid();
     if (envTokens.length > 0 && matchesAny(token, envTokens)) {
       c.set('principal', { kind: 'env' });
@@ -125,17 +129,26 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     return c.json({ object: 'list', data });
   });
 
-  const handle = async (c: Context<{ Variables: { principal: Principal } }>, endpoint: Endpoint): Promise<Response> => {
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return errorResponse(400, 'Request body must be valid JSON', 'invalid_request_error');
+  const handle = async (
+    c: Context<{ Variables: { principal: Principal } }>,
+    endpoint: Endpoint,
+    preparsed?: Record<string, unknown>,
+  ): Promise<Response> => {
+    let payload: Record<string, unknown>;
+    if (preparsed) {
+      payload = preparsed;
+    } else {
+      let body: unknown;
+      try {
+        body = await c.req.json();
+      } catch {
+        return errorResponse(400, 'Request body must be valid JSON', 'invalid_request_error');
+      }
+      if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+        return errorResponse(400, 'Request body must be a JSON object', 'invalid_request_error');
+      }
+      payload = body as Record<string, unknown>;
     }
-    if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-      return errorResponse(400, 'Request body must be a JSON object', 'invalid_request_error');
-    }
-    const payload = body as Record<string, unknown>;
     if (endpoint === 'chat' && (typeof payload.model !== 'string' || !Array.isArray(payload.messages))) {
       return errorResponse(400, "'model' (string) and 'messages' (array) are required", 'invalid_request_error');
     }
@@ -258,6 +271,27 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
 
   app.post('/v1/chat/completions', (c) => handle(c, 'chat'));
   app.post('/v1/embeddings', (c) => handle(c, 'embeddings'));
+
+  // Anthropic Messages API on top of the same pipeline (requests are translated to chat completions and back).
+  const parseAnthropic = async (c: Context<{ Variables: { principal: Principal } }>): Promise<Record<string, unknown> | Response> => {
+    const body = (await c.req.json().catch(() => null)) as unknown;
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) return anthropicError(400, 'Request body must be a JSON object');
+    const problem = validateRequest(body as Record<string, unknown>);
+    return problem ? anthropicError(400, problem) : (body as Record<string, unknown>);
+  };
+
+  app.post('/v1/messages', async (c) => {
+    const parsed = await parseAnthropic(c);
+    if (parsed instanceof Response) return parsed;
+    const res = await handle(c, 'chat', toOpenAIRequest(parsed));
+    return wrapResponse(res, parsed.model as string, estimateInputTokens(parsed));
+  });
+
+  app.post('/v1/messages/count_tokens', async (c) => {
+    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body || !Array.isArray(body.messages)) return anthropicError(400, "'messages' must be an array");
+    return c.json({ input_tokens: estimateInputTokens(body) });
+  });
 
   if (opts.adminPassword) {
     app.route(
