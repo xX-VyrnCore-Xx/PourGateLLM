@@ -31,6 +31,15 @@ In development run `pnpm dev` (API on :3000) and `pnpm --filter @pourgate/client
 Outside Docker, point the server at the built UI with `POURGATE_STATIC_DIR=packages/client/dist`.
 Serve it behind HTTPS in production and set `POURGATE_COOKIE_SECURE=true`.
 
+## Limits and cooldowns
+
+Registry limits are enforced per key *and* model: `rpm`/`tpm` over a sliding 60 s window (in memory, so they restart empty),
+`rpd`/`tpd` as UTC-day counters and key cooldowns (after 429/5xx, honoring `Retry-After` up to 24 h) persisted in SQLite,
+so they survive restarts. Keys are tracked by an HMAC fingerprint; raw keys are never written to usage tables.
+
+- Token limits (`tpm`/`tpd`) use the `usage.total_tokens` reported by the provider on **non-streaming** responses; streamed responses count as requests only.
+- Counters older than 7 days are pruned automatically.
+
 ## Provider keys
 
 Keys can come from environment variables (`GROQ_API_KEYS=k1,k2`) and/or be added in the dashboard (Providers tab: add, test, remove).

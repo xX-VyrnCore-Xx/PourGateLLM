@@ -23,9 +23,11 @@ export function listCandidates(registry: ProviderEntry[], requested: string): Ca
   return requested === AUTO_MODEL ? all : all.filter((c) => c.model.id === requested);
 }
 
+const MAX_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
 function parseRetryAfter(res: Response, fallbackMs: number): number {
   const secs = Number(res.headers.get('retry-after'));
-  return Number.isFinite(secs) && secs > 0 ? secs * 1000 : fallbackMs;
+  return Number.isFinite(secs) && secs > 0 ? Math.min(secs * 1000, MAX_COOLDOWN_MS) : fallbackMs;
 }
 
 export function errorResponse(status: number, message: string, type: string, code?: string): Response {
@@ -53,7 +55,7 @@ export async function routeChat(
     if (!pool) continue;
     const tried = new Set<string>();
     for (;;) {
-      const key = pool.acquire(model.limits.rpm, tried);
+      const key = pool.acquire({ model: model.id, ...model.limits }, tried);
       if (!key) break;
       tried.add(key);
       let res: Response;
@@ -78,6 +80,17 @@ export async function routeChat(
         pool.cooldown(key, 10_000);
         await res.body?.cancel();
         continue;
+      }
+      // Best-effort accounting of provider-reported tokens (non-streaming JSON responses only).
+      if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
+        void res
+          .clone()
+          .json()
+          .then((json: { usage?: { total_tokens?: number } }) => {
+            const total = json?.usage?.total_tokens;
+            if (typeof total === 'number') pool.recordTokens(key, model.id, total);
+          })
+          .catch(() => {});
       }
       const headers = new Headers(res.headers);
       headers.set('x-pourgate-provider', provider.provider);

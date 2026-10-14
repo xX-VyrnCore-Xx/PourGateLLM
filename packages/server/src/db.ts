@@ -36,6 +36,21 @@ const MIGRATIONS: string[] = [
      created_at INTEGER NOT NULL
    );
    CREATE INDEX idx_provider_keys_provider ON provider_keys(provider);`,
+  `CREATE TABLE key_usage (
+     provider TEXT NOT NULL,
+     key_fp TEXT NOT NULL,
+     model TEXT NOT NULL,
+     day TEXT NOT NULL,
+     requests INTEGER NOT NULL DEFAULT 0,
+     tokens INTEGER NOT NULL DEFAULT 0,
+     PRIMARY KEY (provider, key_fp, model, day)
+   );
+   CREATE TABLE key_cooldowns (
+     provider TEXT NOT NULL,
+     key_fp TEXT NOT NULL,
+     until INTEGER NOT NULL,
+     PRIMARY KEY (provider, key_fp)
+   );`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

@@ -226,6 +226,7 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
             context: m.context ?? null,
             limits: m.limits,
             verifiedAt: m.verified_at ?? null,
+            usageToday: pool?.usageToday(m.id) ?? { requests: 0, tokens: 0 },
           })),
         };
       }),

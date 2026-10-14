@@ -109,7 +109,7 @@ models:
 
 | Fase | Contenuto |
 |---|---|
-| **MVP** | Monorepo, `/v1/chat/completions` + `/v1/models`, 5 provider (Groq, Gemini, Cerebras, Mistral, OpenRouter), key pool cifrato, limiter RPM/RPD, failover, SQLite, CLI base, Docker |
+| **MVP** (fatto: vedi README) | Monorepo, `/v1/chat/completions` + `/v1/models`, 5 provider (Groq, Gemini, Cerebras, Mistral, OpenRouter), key pool cifrato, limiter RPM/RPD, failover, SQLite, CLI base, Docker |
 | **v0.2** | Registry aperto + sync + CI, dashboard (chiavi, modelli, playground), token per client |
 | **v0.3** | Eval periodiche + scoring, strategie e profili, analytics |
 | **v0.4** | Routing per complessità, cache, PII redaction, OpenTelemetry |

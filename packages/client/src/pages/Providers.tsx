@@ -79,6 +79,7 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
               <li key={m.id} className="flex flex-wrap items-center justify-between gap-2">
                 <code>{m.id}</code>
                 <span className="text-xs text-muted">
+                  {m.usageToday.requests > 0 && `${m.usageToday.requests} req / ${m.usageToday.tokens} tok · `}
                   {m.limits.rpm ? `${m.limits.rpm} rpm` : ''}
                   {m.verifiedAt ? '' : ` ${t('unverified')}`}
                 </span>

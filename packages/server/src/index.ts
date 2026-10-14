@@ -9,18 +9,23 @@ import { loadRegistry } from './registry.js';
 import { RegistryManager } from './registry-sync.js';
 import { loadMasterKey } from './secrets.js';
 import { TokenStore } from './tokens.js';
+import { SqliteUsage, makeFingerprint, pruneUsage } from './usage.js';
 
 const dbPath = resolve(process.env.POURGATE_DB ?? 'data/pourgate.db');
 const db = openDatabase(dbPath);
 const store = new TokenStore(db);
-const keyStore = new KeyStore(
-  db,
-  loadMasterKey({
-    env: process.env.POURGATE_MASTER_KEY,
-    keyfile: resolve(process.env.POURGATE_MASTER_KEY_FILE ?? resolve(dbPath, '..', 'master.key')),
-  }),
-);
-const poolManager = new PoolManager(keyStore);
+const masterKey = loadMasterKey({
+  env: process.env.POURGATE_MASTER_KEY,
+  keyfile: resolve(process.env.POURGATE_MASTER_KEY_FILE ?? resolve(dbPath, '..', 'master.key')),
+});
+const keyStore = new KeyStore(db, masterKey);
+const fingerprint = makeFingerprint(masterKey);
+const poolManager = new PoolManager(keyStore, process.env, console.warn, (provider) => ({
+  backend: new SqliteUsage(db, provider),
+  fingerprint,
+}));
+pruneUsage(db);
+setInterval(() => pruneUsage(db), 6 * 3_600_000).unref();
 
 const overridesDir = resolve(process.env.POURGATE_OVERRIDES_DIR ?? 'overrides');
 const pubKeyEnv = process.env.POURGATE_REGISTRY_PUBKEY?.trim();

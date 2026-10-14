@@ -1,6 +1,6 @@
 import type { ProviderEntry } from '@pourgate/shared';
 import type { KeyStore } from './keys.js';
-import { KeyPool } from './keypool.js';
+import { KeyPool, type KeyPoolOptions } from './keypool.js';
 
 /** Builds one KeyPool per provider from environment keys plus keys stored in the database. */
 export class PoolManager {
@@ -12,6 +12,7 @@ export class PoolManager {
     private readonly keyStore: KeyStore | undefined,
     private readonly env: Record<string, string | undefined> = process.env,
     private readonly log: (msg: string) => void = console.warn,
+    private readonly poolOptions: (provider: string) => KeyPoolOptions = () => ({}),
   ) {}
 
   envKeys(entry: ProviderEntry): string[] {
@@ -46,7 +47,7 @@ export class PoolManager {
       } else if (pool) {
         pool.setKeys(keys);
       } else {
-        this.pools.set(entry.provider, new KeyPool(keys));
+        this.pools.set(entry.provider, new KeyPool(keys, this.poolOptions(entry.provider)));
       }
     }
   }
