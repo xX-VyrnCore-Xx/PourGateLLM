@@ -3,6 +3,8 @@ export interface Finished {
   totalMs: number;
   tokens: number | null;
   error: string | null;
+  /** Whole body when it was a small JSON response that completed cleanly; otherwise null. */
+  body: Buffer | null;
 }
 
 const CAPTURE_LIMIT = 256 * 1024;
@@ -18,16 +20,17 @@ export function observeResponse(res: Response, startedAt: number, onDone: (f: Fi
     if (finished) return;
     finished = true;
     let tokens: number | null = null;
-    if (chunks && chunks.length > 0) {
+    const whole = chunks && chunks.length > 0 && !error ? Buffer.concat(chunks) : null;
+    if (whole) {
       try {
-        const json = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { usage?: { total_tokens?: unknown } };
+        const json = JSON.parse(whole.toString('utf8')) as { usage?: { total_tokens?: unknown } };
         const t = json?.usage?.total_tokens;
         if (typeof t === 'number' && t > 0) tokens = t;
       } catch {
         // not JSON / truncated: no token count
       }
     }
-    onDone({ totalMs: performance.now() - startedAt, tokens, error: error ?? (status >= 400 ? `http_${status}` : null) });
+    onDone({ totalMs: performance.now() - startedAt, tokens, error: error ?? (status >= 400 ? `http_${status}` : null), body: whole });
   };
 
   if (!res.body) {

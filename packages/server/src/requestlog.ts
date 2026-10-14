@@ -17,6 +17,8 @@ export interface LogEntry {
   tokens: number | null;
   /** Number of PII items masked before forwarding; null when masking was not applied. */
   redacted: number | null;
+  /** 'hit' when served from the response cache, 'miss' when cacheable but not found, null otherwise. */
+  cache: 'hit' | 'miss' | null;
   stream: boolean;
   error: string | null;
 }
@@ -35,6 +37,7 @@ interface Row {
   total_ms: number;
   tokens: number | null;
   redacted: number | null;
+  cache: string | null;
   stream: number;
   error: string | null;
 }
@@ -52,7 +55,7 @@ export interface ModelStats {
 export interface Analytics {
   since: number;
   bucketMs: number;
-  summary: { requests: number; errors: number; errorRate: number; tokens: number; p50Ms: number | null; p95Ms: number | null };
+  summary: { requests: number; errors: number; errorRate: number; cacheHits: number; tokens: number; p50Ms: number | null; p95Ms: number | null };
   byModel: ModelStats[];
   series: { t: number; requests: number; errors: number }[];
 }
@@ -75,6 +78,7 @@ const toEntry = (r: Row): LogEntry => ({
   totalMs: r.total_ms,
   tokens: r.tokens,
   redacted: r.redacted,
+  cache: r.cache === 'hit' || r.cache === 'miss' ? r.cache : null,
   stream: r.stream === 1,
   error: r.error,
 });
@@ -85,10 +89,10 @@ export class RequestLog {
   insert(e: LogEntry): void {
     this.db
       .prepare(
-        `INSERT INTO request_log (ts, token_id, requested, provider, model, tier, complexity, status, ttfb_ms, total_ms, tokens, redacted, stream, error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO request_log (ts, token_id, requested, provider, model, tier, complexity, status, ttfb_ms, total_ms, tokens, redacted, cache, stream, error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(e.ts, e.tokenId, e.requested.slice(0, 200), e.provider, e.model, e.tier, e.complexity, e.status, Math.round(e.ttfbMs), Math.round(e.totalMs), e.tokens, e.redacted, e.stream ? 1 : 0, e.error);
+      .run(e.ts, e.tokenId, e.requested.slice(0, 200), e.provider, e.model, e.tier, e.complexity, e.status, Math.round(e.ttfbMs), Math.round(e.totalMs), e.tokens, e.redacted, e.cache, e.stream ? 1 : 0, e.error);
   }
 
   recent(limit = 100): LogEntry[] {
@@ -108,8 +112,8 @@ export class RequestLog {
 
   analytics(since: number, bucketMs: number): Analytics {
     const rows = this.db
-      .prepare('SELECT ts, provider, model, status, error, total_ms, tokens FROM request_log WHERE ts >= ? ORDER BY ts LIMIT ?')
-      .all(since, MAX_ROWS) as unknown as Pick<Row, 'ts' | 'provider' | 'model' | 'status' | 'error' | 'total_ms' | 'tokens'>[];
+      .prepare('SELECT ts, provider, model, status, error, total_ms, tokens, cache FROM request_log WHERE ts >= ? ORDER BY ts LIMIT ?')
+      .all(since, MAX_ROWS) as unknown as Pick<Row, 'ts' | 'provider' | 'model' | 'status' | 'error' | 'total_ms' | 'tokens' | 'cache'>[];
 
     const isError = (r: { status: number; error: string | null }) => r.status >= 400 || r.error !== null;
     const all: number[] = [];
@@ -117,11 +121,13 @@ export class RequestLog {
     const buckets = new Map<number, { requests: number; errors: number }>();
     let errors = 0;
     let tokens = 0;
+    let cacheHits = 0;
 
     for (const r of rows) {
       const err = isError(r);
       if (err) errors++;
       tokens += r.tokens ?? 0;
+      if (r.cache === 'hit') cacheHits++;
       if (!err) all.push(r.total_ms);
       const key = `${r.provider ?? '-'}|${r.model ?? '-'}`;
       let m = perModel.get(key);
@@ -152,6 +158,7 @@ export class RequestLog {
         requests: rows.length,
         errors,
         errorRate: rows.length ? errors / rows.length : 0,
+        cacheHits,
         tokens,
         p50Ms: percentile(all, 50),
         p95Ms: percentile(all, 95),

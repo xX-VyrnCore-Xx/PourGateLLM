@@ -67,6 +67,11 @@ const en = {
   last30d: '30 days',
   requestsOverTime: 'Requests over time',
   unrouted: 'unrouted (no model served)',
+  cacheHits: 'Cache hits',
+  responseCache: 'Response cache',
+  cacheEntries: 'entries',
+  cacheStoredHits: 'hits served',
+  clearCache: 'Clear cache',
 } as const;
 
 export type Key = keyof typeof en;
@@ -138,6 +143,11 @@ const it: Record<Key, string> = {
   last30d: '30 giorni',
   requestsOverTime: 'Richieste nel tempo',
   unrouted: 'non instradate (nessun modello)',
+  cacheHits: 'Risposte dalla cache',
+  responseCache: 'Cache delle risposte',
+  cacheEntries: 'voci',
+  cacheStoredHits: 'risposte servite',
+  clearCache: 'Svuota cache',
 };
 
 const dictionaries: Record<string, Record<Key, string>> = { en, it };

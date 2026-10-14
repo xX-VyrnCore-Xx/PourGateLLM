@@ -53,6 +53,7 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 | 🔁 **Smart failover** | On `429` / `5xx` / network errors it rotates to the next key, then the next model, honoring `Retry-After`. |
 | 📊 **Real quota accounting** | `rpm`, `rpd`, `tpm`, `tpd` enforced per key *and* model. Daily counters and cooldowns persist in SQLite. |
 | 🔑 **Per-client tokens** | Create tokens with their own rate limit, daily quota and expiry. Stored as SHA-256 hashes, revocable any time. |
+| ⚡ **Response cache** | Opt-in exact-match cache for repeatable requests (temperature 0 or a seed): repeated prompts cost no provider quota. Scoped per client, bypassable per request. |
 | 🛡️ **Privacy controls** | Mask emails, phones, cards, IBANs, tax ids and secrets before prompts leave the gateway, and exclude providers that train on prompts. Clients can tighten (never loosen) per request. |
 | 📈 **Analytics & metrics** | Request log (metadata only, never prompts), dashboard analytics (volume, errors, p50/p95 latency, tokens per model), JSONL export and a Prometheus `/metrics` endpoint. |
 | 🖥️ **Dashboard** | React + Tailwind UI in light and dark mode (English, Italian): manage tokens and provider keys, test keys, watch usage. |
@@ -201,6 +202,15 @@ Responses include `x-pourgate-complexity` (for `auto`) and `x-pourgate-tier` so 
 
 Set `POURGATE_ADMIN_PASSWORD` to enable it. Sessions use an `HttpOnly`, `SameSite=Strict` cookie, login attempts are rate-limited, and cross-origin writes are rejected. Serve it over HTTPS and set `POURGATE_COOKIE_SECURE=true`.
 
+## ⚡ Response cache
+
+Off by default. Set `POURGATE_CACHE_TTL_SECONDS` to serve repeated identical requests without calling a provider, so they use no free-tier quota and answer in milliseconds.
+
+- **What is cached:** completed, non-streaming `200` JSON responses up to 256 KB. By default (`deterministic`) only requests with `temperature: 0` or a `seed`, because those are the ones where repeating the answer is expected. Use `POURGATE_CACHE_MODE=all` to cache any non-streaming request.
+- **Isolation:** entries are scoped per client token (and per privacy settings), so one client never receives another's response. The key is a hash of the whole request body, so prompts are not stored; **completions are**, in your SQLite database, until they expire.
+- **Control:** send `x-pourgate-cache: bypass` (or `Cache-Control: no-cache` / `no-store`) to skip the cache for a request. Hits carry `x-pourgate-cache: hit` and an `Age` header and are marked in analytics and in `pourgate_cache_requests_total`.
+- The dashboard's Analytics tab shows entries, hits and a **Clear cache** button.
+
 ## 🛡️ Privacy controls
 
 Free tiers often use prompts to improve their models. Two independent controls reduce what leaves your machine:
@@ -244,6 +254,9 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_MASTER_KEY` | auto | 32-byte key (hex or base64) encrypting dashboard-stored keys. Generate with `openssl rand -hex 32`. If unset, `data/master.key` is created on first start. |
 | `POURGATE_DB` | `data/pourgate.db` | SQLite database path. |
 | `PORT` | `3000` | HTTP port. |
+| `POURGATE_CACHE_TTL_SECONDS` | `0` (off) | Enables the response cache; entries expire after this many seconds. |
+| `POURGATE_CACHE_MODE` | `deterministic` | `deterministic` caches requests with `temperature: 0` or a `seed`; `all` caches every non-streaming request. |
+| `POURGATE_CACHE_MAX_ENTRIES` | `1000` | Oldest entries are evicted beyond this. |
 | `POURGATE_PII_MODE` | `off` | `off`, `training` (mask for providers that may train on prompts) or `all`. |
 | `POURGATE_PRIVACY_POLICY` | `any` | `any`, `no-training` (skip providers flagged `trains_on_prompts: true`) or `strict` (only providers flagged `false`). |
 | `POURGATE_METRICS_TOKEN` | | Enables `GET /metrics` (Prometheus), protected by this bearer token. |
@@ -334,7 +347,8 @@ Found a vulnerability? Please open a private security advisory on GitHub rather 
 - [x] Docker image and Compose
 - [ ] Periodic evals to rank models on real quality, latency and reliability
 - [x] Routing by prompt complexity (heuristic classifier)
-- [ ] Semantic and prompt caching
+- [x] Exact-match response cache
+- [ ] Semantic cache (embedding similarity)
 - [x] Request analytics, JSONL export and Prometheus metrics
 - [ ] OpenTelemetry (OTLP) tracing
 - [x] PII redaction and per-provider privacy policies

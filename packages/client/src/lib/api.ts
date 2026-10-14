@@ -70,7 +70,7 @@ export interface RegistryStatus {
 export interface Analytics {
   since: number;
   bucketMs: number;
-  summary: { requests: number; errors: number; errorRate: number; tokens: number; p50Ms: number | null; p95Ms: number | null };
+  summary: { requests: number; errors: number; errorRate: number; cacheHits: number; tokens: number; p50Ms: number | null; p95Ms: number | null };
   byModel: { provider: string; model: string; requests: number; errors: number; tokens: number; p50Ms: number | null; p95Ms: number | null }[];
   series: { t: number; requests: number; errors: number }[];
 }
@@ -94,6 +94,8 @@ export const api = {
   removeProviderKey: (id: number) => request<void>(`/provider-keys/${id}`, { method: 'DELETE' }),
   testProviderKey: (id: number) =>
     request<{ ok: boolean; status: number | null }>(`/provider-keys/${id}/test`, { method: 'POST' }),
+  cache: () => request<{ enabled: boolean; mode?: string; entries?: number; hits?: number; bytes?: number }>('/cache'),
+  clearCache: () => request<{ cleared: number }>('/cache', { method: 'DELETE' }),
   analytics: (range: string) => request<Analytics>(`/analytics?range=${encodeURIComponent(range)}`),
   registry: () => request<RegistryStatus | null>('/registry'),
   syncRegistry: () => request<RegistryStatus>('/registry/sync', { method: 'POST' }),

@@ -4,6 +4,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { ProviderEntry } from '@pourgate/shared';
 import { KeyStoreError, type KeyStore } from './keys.js';
+import type { ResponseCache } from './cache.js';
 import type { KeyPool } from './keypool.js';
 import type { PoolManager } from './pools.js';
 import type { RequestLog } from './requestlog.js';
@@ -25,6 +26,7 @@ export interface AdminOptions {
   keyStore?: KeyStore;
   poolManager?: PoolManager;
   requestLog?: RequestLog;
+  cache?: ResponseCache;
   fetch?: typeof fetch;
   pools: Map<string, KeyPool>;
   /** Set the Secure cookie flag (use when served over HTTPS). */
@@ -167,6 +169,12 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     const range = RANGES[c.req.query('range') ?? '24h'];
     if (!range) return c.json({ error: "range must be one of 24h, 7d, 30d" }, 400);
     return c.json(opts.requestLog.analytics(now() - range.ms, range.bucketMs));
+  });
+
+  app.get('/cache', (c) => c.json(opts.cache ? { enabled: true, mode: opts.cache.mode, ...opts.cache.stats() } : { enabled: false }));
+  app.delete('/cache', (c) => {
+    if (!opts.cache) return c.json({ error: 'cache is not enabled' }, 404);
+    return c.json({ cleared: opts.cache.clear() });
   });
 
   app.get('/requests', (c) => {

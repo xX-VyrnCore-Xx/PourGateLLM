@@ -8,6 +8,7 @@ import { PoolManager } from './pools.js';
 import { loadRegistry } from './registry.js';
 import { RegistryManager } from './registry-sync.js';
 import { loadMasterKey } from './secrets.js';
+import { ResponseCache, parseCacheMode } from './cache.js';
 import { Metrics } from './metrics.js';
 import { parsePiiMode, parsePolicy } from './privacy.js';
 import { RequestLog } from './requestlog.js';
@@ -36,6 +37,20 @@ const poolManager = new PoolManager(keyStore, process.env, console.warn, (provid
   fingerprint,
 }));
 const requestLog = new RequestLog(db);
+const cacheTtl = Number(process.env.POURGATE_CACHE_TTL_SECONDS ?? 0);
+let cache: ResponseCache | undefined;
+if (cacheTtl > 0) {
+  try {
+    cache = new ResponseCache(db, {
+      ttlMs: cacheTtl * 1000,
+      maxEntries: Math.max(1, Number(process.env.POURGATE_CACHE_MAX_ENTRIES ?? 1000)),
+      mode: parseCacheMode(process.env.POURGATE_CACHE_MODE),
+    });
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
+}
 const retentionMs = Math.max(1, Number(process.env.POURGATE_LOG_RETENTION_DAYS ?? 30)) * 86_400_000;
 const prune = () => {
   pruneUsage(db);
@@ -84,6 +99,7 @@ serve(
       keyStore,
       poolManager,
       privacy,
+      cache,
       requestLog,
       metrics: new Metrics(),
       metricsToken: process.env.POURGATE_METRICS_TOKEN || undefined,
