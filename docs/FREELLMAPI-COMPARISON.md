@@ -25,8 +25,8 @@ Open, signed, self-updating registry (no paid catalog); per-client tokens with q
 | Feature | Status here |
 |---|---|
 | `/v1/responses` (needed by Codex CLI) and `/v1/completions` (editor autocomplete) | **done** (text, tools, streaming; responses are not stored) |
-| "Fusion": fan out to several models and have a judge merge the answers | not implemented |
-| Named fallback-chain profiles (`auto:<profile>`) and sticky sessions | not implemented |
+| "Fusion": fan out to several models and have a judge merge the answers | **done** (`"model": "fusion"`, no tools) |
+| Named fallback-chain profiles (`auto:<profile>`) and sticky sessions | **done** (file-based `profiles.yaml`, `x-pourgate-session` header; no dashboard editor yet) |
 | Dashboard form to add a custom OpenAI-compatible endpoint | possible today through registry overrides, no UI |
 | Bulk key import/export, periodic key health checks | not implemented (per-key test button exists) |
 | Native Gemini and Ollama API surfaces, MCP server | not implemented |

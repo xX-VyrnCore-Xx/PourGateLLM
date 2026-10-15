@@ -4,6 +4,8 @@ import { COMPLEXITY_TIER, TIER_ORDER, analyzePrompt, requiredCapabilities, type 
 import { rankScore, type ModelScore, type Strategy } from './evals.js';
 import { KeyPool } from './keypool.js';
 import type { LatencyTracker } from './latency.js';
+import type { Profiles, StickyStore } from './profiles.js';
+import { FUSION_MODEL, runFusion } from './fusion.js';
 import { exhaustedFor, parseRateLimitHeaders, type ObservedLimits } from './ratelimits.js';
 import type { ProviderAdapter } from './plugins.js';
 import { DEFAULT_PRIVACY, needsRedaction, providerAllowed, redactBody, redactTextFields, type PrivacyConfig } from './privacy.js';
@@ -31,6 +33,13 @@ export interface RouterDeps {
   breaker?: Breaker;
   /** Learns how fast each target answers; faster ones go first among otherwise equal candidates. */
   latency?: LatencyTracker;
+  /** Number of models asked by the `fusion` virtual model (default 3, max 5). */
+  fusionPanel?: number;
+  /** Named fallback chains (`auto:<name>`). */
+  profiles?: Profiles;
+  /** With `sessionKey`: keeps a conversation on the model that served it last, for virtual models and profiles. */
+  sticky?: StickyStore;
+  sessionKey?: string;
   /** Max wait for the upstream to start answering, in ms (default 60000). The body may stream for longer. */
   timeoutMs?: number;
   /** Called after each upstream attempt (for tracing); never receives prompts. */
@@ -154,7 +163,9 @@ export async function routeChat(
   form?: FormData,
 ): Promise<Response> {
   const privacy = deps.privacy ?? DEFAULT_PRIVACY;
-  let candidates = listCandidates(deps.registry, requested, endpoint);
+  if (endpoint === 'chat' && requested === FUSION_MODEL && !form) return runFusion(deps, body, routeChat, deps.fusionPanel ?? 3, signal);
+  const profile = endpoint === 'chat' ? deps.profiles?.profileFor(requested) : undefined;
+  let candidates = profile ? deps.profiles!.resolve(deps.registry, profile) : listCandidates(deps.registry, requested, endpoint);
   if (candidates.length > 0) {
     const allowed = candidates.filter((c) => providerAllowed(privacy.policy, c.provider));
     if (allowed.length === 0) {
@@ -190,6 +201,23 @@ export async function routeChat(
   }
   if (candidates.length === 0) {
     return errorResponse(404, `The model '${requested}' does not exist`, 'invalid_request_error', 'model_not_found');
+  }
+
+  if (profile) {
+    // A profile keeps its own order; it only drops models that cannot serve this request.
+    const needs = analyzePrompt(body);
+    const caps = requiredCapabilities(needs.needs);
+    candidates = candidates.filter((c) => caps.every((cap) => c.model.capabilities.includes(cap)) && (c.model.context === undefined || needs.promptTokens < c.model.context));
+    if (candidates.length === 0) {
+      return errorResponse(400, 'No model in this profile supports this request (required capabilities or context length)', 'invalid_request_error', 'no_capable_model');
+    }
+  }
+  // A conversation stays on the model that answered it last, while that model is still a candidate.
+  const stickyKey = deps.sticky && deps.sessionKey && (virtual || profile) ? `${deps.sessionKey}|${requested}` : undefined;
+  if (stickyKey) {
+    const last = deps.sticky!.get(stickyKey);
+    const at = last ? candidates.findIndex((c) => `${c.provider.provider}|${c.model.id}` === last) : -1;
+    if (at > 0) candidates = [candidates[at]!, ...candidates.slice(0, at), ...candidates.slice(at + 1)];
   }
 
   // Healthy targets first; ones whose circuit is open are only a last resort.
@@ -306,6 +334,7 @@ export async function routeChat(
           })
           .catch(() => {});
       }
+      if (stickyKey && res.ok) deps.sticky!.set(stickyKey, target);
       const headers = new Headers(res.headers);
       headers.set('x-pourgate-provider', provider.provider);
       headers.set('x-pourgate-model', model.id);
