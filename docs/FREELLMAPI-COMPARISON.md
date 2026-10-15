@@ -24,7 +24,7 @@ Open, signed, self-updating registry (no paid catalog); per-client tokens with q
 
 | Feature | Status here |
 |---|---|
-| `/v1/responses` (needed by Codex CLI) and `/v1/completions` (editor autocomplete) | not implemented |
+| `/v1/responses` (needed by Codex CLI) and `/v1/completions` (editor autocomplete) | **done** (text, tools, streaming; responses are not stored) |
 | "Fusion": fan out to several models and have a judge merge the answers | not implemented |
 | Named fallback-chain profiles (`auto:<profile>`) and sticky sessions | not implemented |
 | Dashboard form to add a custom OpenAI-compatible endpoint | possible today through registry overrides, no UI |

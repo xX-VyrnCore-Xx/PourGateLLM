@@ -259,6 +259,18 @@ msg = client.messages.create(model="claude-sonnet-4-5", max_tokens=200,
 - **Not supported:** extended thinking, prompt-cache markers, documents/citations and server tools are ignored or rejected by the underlying models; usage during streaming is an estimate when the provider does not report it.
 - **Tested with** the official `@anthropic-ai/sdk` (create, stream, tool use and tool results) against a fake upstream. Free models are much weaker than Claude, so agentic tools that expect Claude-level tool use may behave poorly.
 
+## 🧩 Completions and Responses APIs
+
+Two more OpenAI surfaces run on the same pipeline (keys, limits, failover, cache, privacy, audit), translated to and from chat completions:
+
+- `POST /v1/completions`: the legacy text-completion call used for editor autocomplete. `suffix` is supported (fill in the middle), `stream` works; batched prompts and `n > 1` are refused.
+- `POST /v1/responses`: the Responses API used by Codex CLI and newer SDKs. Text, `instructions`, image input, function tools / `tool_choice`, `text.format` (JSON object / schema), `max_output_tokens` and the full streaming event sequence are supported. Responses are **not stored**: send the whole conversation in `input` (`previous_response_id` is refused). Hosted tools (web search, file search, code interpreter) and reasoning items are ignored.
+
+```bash
+export OPENAI_BASE_URL=http://localhost:3000/v1 OPENAI_API_KEY=<your token>
+codex --model auto          # Codex CLI through the gateway
+```
+
 ## 🧠 Complexity routing
 
 `"model": "auto"` looks at each request and decides how much model it deserves, **without spending any provider quota** (it is a small deterministic classifier, not another LLM call).

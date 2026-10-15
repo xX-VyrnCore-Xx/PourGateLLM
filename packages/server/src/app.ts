@@ -1,6 +1,7 @@
 import type { AuditLog } from './audit.js';
 import { Breaker } from './breaker.js';
 import { LatencyTracker } from './latency.js';
+import { BadRequest, completionsToChat, openaiError, responsesToChat, wrapCompletions, wrapResponses } from './openai-extra.js';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
@@ -569,6 +570,23 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   app.post('/v1/audio/transcriptions', (c) => handle(c, 'transcription'));
   app.post('/v1/audio/speech', (c) => handle(c, 'speech'));
   app.post('/v1/images/generations', (c) => handle(c, 'images'));
+
+  // Legacy completions (editor autocomplete) and the Responses API (Codex CLI) on top of chat completions.
+  const translated = (convert: (b: Record<string, unknown>) => Record<string, unknown>, wrap: (r: Response, model: string) => Promise<Response>) =>
+    async (c: Context<{ Variables: { principal: Principal } }>) => {
+      const body = (await c.req.json().catch(() => null)) as unknown;
+      if (typeof body !== 'object' || body === null || Array.isArray(body)) return openaiError(400, 'Request body must be a JSON object');
+      let chat: Record<string, unknown>;
+      try {
+        chat = convert(body as Record<string, unknown>);
+      } catch (e) {
+        if (e instanceof BadRequest) return openaiError(400, e.message);
+        throw e;
+      }
+      return wrap(await handle(c, 'chat', chat), String((body as Record<string, unknown>).model));
+    };
+  app.post('/v1/completions', translated(completionsToChat, wrapCompletions));
+  app.post('/v1/responses', translated(responsesToChat, wrapResponses));
 
   // Anthropic Messages API on top of the same pipeline (requests are translated to chat completions and back).
   const parseAnthropic = async (c: Context<{ Variables: { principal: Principal } }>): Promise<Record<string, unknown> | Response> => {
