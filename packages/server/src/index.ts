@@ -152,6 +152,7 @@ serve(
       keyStore,
       poolManager,
       privacy,
+      maxUploadBytes: Math.max(1, Number(process.env.POURGATE_MAX_UPLOAD_MB ?? 25)) * 1024 * 1024,
       plugins,
       tracer,
       scoring,

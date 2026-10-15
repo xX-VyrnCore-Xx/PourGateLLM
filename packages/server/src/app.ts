@@ -42,6 +42,8 @@ export interface AppOptions {
   scoring?: Scoring;
   /** Eval runner/store, exposed through the admin API. */
   evals?: { runner: EvalRunner; store: EvalStore; strategy: Strategy; tasksPerModel: number; tasks: number };
+  /** Largest accepted audio upload in bytes (default 25 MB). */
+  maxUploadBytes?: number;
   /** Trusted plugins: request hooks, response observers and provider adapters. */
   plugins?: PluginHost;
   /** OTLP trace exporter; tracing is off when unset. */
@@ -56,6 +58,14 @@ export interface AppOptions {
   /** Directory with the built dashboard; served at / when it exists. */
   staticDir?: string;
 }
+
+const ROUTES: Record<Endpoint, string> = {
+  chat: '/v1/chat/completions',
+  embeddings: '/v1/embeddings',
+  transcription: '/v1/audio/transcriptions',
+  speech: '/v1/audio/speech',
+  images: '/v1/images/generations',
+};
 
 type Principal = { kind: 'env' } | { kind: 'client'; record: TokenRecord };
 
@@ -76,6 +86,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   const envTokens = opts.envTokens ?? [];
   const getRegistry = typeof opts.registry === 'function' ? opts.registry : () => opts.registry as ProviderEntry[];
   const rpm = new SlidingWindow();
+  const maxUploadBytes = opts.maxUploadBytes ?? 25 * 1024 * 1024;
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
@@ -141,8 +152,29 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     preparsed?: Record<string, unknown>,
   ): Promise<Response> => {
     let payload: Record<string, unknown>;
+    let form: FormData | undefined;
     if (preparsed) {
       payload = preparsed;
+    } else if (endpoint === 'transcription') {
+      if (Number(c.req.header('content-length') ?? 0) > maxUploadBytes) {
+        return errorResponse(413, `Uploads are limited to ${Math.floor(maxUploadBytes / 1024 / 1024)} MB`, 'invalid_request_error', 'file_too_large');
+      }
+      try {
+        form = await c.req.formData();
+      } catch {
+        return errorResponse(400, 'Request body must be multipart/form-data', 'invalid_request_error');
+      }
+      const file = form.get('file');
+      const model = form.get('model');
+      if (!(file instanceof File) || typeof model !== 'string' || model === '') {
+        return errorResponse(400, "'file' and 'model' are required", 'invalid_request_error');
+      }
+      if (file.size > maxUploadBytes) {
+        return errorResponse(413, `Uploads are limited to ${Math.floor(maxUploadBytes / 1024 / 1024)} MB`, 'invalid_request_error', 'file_too_large');
+      }
+      // Plugins and logs see the text fields only, never the audio.
+      payload = { model };
+      for (const [k, v] of form.entries()) if (typeof v === 'string' && k !== 'model') payload[k] = v;
     } else {
       let body: unknown;
       try {
@@ -160,6 +192,12 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     }
     if (endpoint === 'embeddings' && (typeof payload.model !== 'string' || payload.input === undefined || payload.input === null || payload.input === '')) {
       return errorResponse(400, "'model' (string) and 'input' are required", 'invalid_request_error');
+    }
+    if (endpoint === 'speech' && (typeof payload.model !== 'string' || typeof payload.input !== 'string' || payload.input === '')) {
+      return errorResponse(400, "'model' and a non-empty text 'input' are required", 'invalid_request_error');
+    }
+    if (endpoint === 'images' && (typeof payload.model !== 'string' || typeof payload.prompt !== 'string' || payload.prompt === '')) {
+      return errorResponse(400, "'model' and a non-empty 'prompt' are required", 'invalid_request_error');
     }
 
     const principal = c.get('principal');
@@ -205,7 +243,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       if (tracer) r.headers.set('x-pourgate-trace-id', traceId);
       return r;
     };
-    const route = endpoint === 'chat' ? '/v1/chat/completions' : '/v1/embeddings';
+    const route = ROUTES[endpoint];
 
     const record = (r: { routed: Response; totalMs: number; ttfbMs: number; tokens: number | null; error: string | null; cache: 'hit' | 'miss' | null }) => {
       const provider = r.routed.headers.get('x-pourgate-provider');
@@ -322,6 +360,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       payload.model as string,
       c.req.raw.signal,
       endpoint,
+      form,
     );
     const ttfbMs = performance.now() - startedAt;
     const res =
@@ -361,6 +400,9 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
 
   app.post('/v1/chat/completions', (c) => handle(c, 'chat'));
   app.post('/v1/embeddings', (c) => handle(c, 'embeddings'));
+  app.post('/v1/audio/transcriptions', (c) => handle(c, 'transcription'));
+  app.post('/v1/audio/speech', (c) => handle(c, 'speech'));
+  app.post('/v1/images/generations', (c) => handle(c, 'images'));
 
   // Anthropic Messages API on top of the same pipeline (requests are translated to chat completions and back).
   const parseAnthropic = async (c: Context<{ Variables: { principal: Principal } }>): Promise<Record<string, unknown> | Response> => {

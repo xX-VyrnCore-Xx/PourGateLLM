@@ -19,7 +19,9 @@ export default {
 
   // Optional: inspect, rewrite or reject a request before routing.
   onRequest({ endpoint, body, clientId, headers }) {
-    // endpoint: 'chat' | 'embeddings'; body is always OpenAI format (Anthropic requests are translated first)
+    // endpoint: 'chat' | 'embeddings' | 'transcription' | 'speech' | 'images'
+    // body is OpenAI format (Anthropic requests are translated first); for 'transcription' it holds the text fields
+    // only (never the audio) and rewrites are ignored, but rejecting works
     // clientId: token id, or null for static env tokens; headers never include credentials
     return { body: { ...body, temperature: 0 } };            // replace the body
     // return { reject: { status: 400, message: 'no' } };    // or reject

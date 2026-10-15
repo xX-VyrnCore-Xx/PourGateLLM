@@ -5,8 +5,11 @@ import { pathToFileURL } from 'node:url';
 type Json = Record<string, unknown>;
 
 /** What a plugin sees of a request: the (OpenAI-format) body and non-secret metadata. */
+export type EndpointKind = 'chat' | 'embeddings' | 'transcription' | 'speech' | 'images';
+
 export interface RequestContext {
-  endpoint: 'chat' | 'embeddings';
+  /** For `transcription` the body holds the text fields only (the audio is never exposed) and rewrites are ignored; rejecting still works. */
+  endpoint: EndpointKind;
   body: Json;
   /** Client token id, or null for static env tokens. */
   clientId: number | null;
@@ -18,7 +21,7 @@ export type RequestResult = void | { body?: Json } | { reject: { status?: number
 
 /** Metadata about a finished request. Never contains prompts or completions. */
 export interface ResponseInfo {
-  endpoint: 'chat' | 'embeddings';
+  endpoint: EndpointKind;
   requested: string;
   provider: string | null;
   model: string | null;

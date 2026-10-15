@@ -48,7 +48,7 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 
 | | |
 |---|---|
-| 🔌 **OpenAI-compatible API** | `GET /v1/models`, `POST /v1/chat/completions` (streaming passthrough) and `POST /v1/embeddings`. Use `"model": "auto"` or a specific model id. |
+| 🔌 **OpenAI-compatible API** | `GET /v1/models`, `POST /v1/chat/completions` (streaming passthrough), `/v1/embeddings`, `/v1/audio/transcriptions`, `/v1/audio/speech` and `/v1/images/generations`. Use `"model": "auto"` or a specific model id. |
 | 🧩 **Plugins** | Drop-in JS modules: rewrite or reject requests, observe responses, and add adapters for providers that are not OpenAI-compatible. See [docs/PLUGINS.md](docs/PLUGINS.md). |
 | 🔀 **Anthropic Messages API** | `POST /v1/messages` (streaming, tools, images) so the Anthropic SDKs and tools that speak that API can use the pool. `claude-*` model names map to tiers. |
 | 🧠 **Complexity routing** | `"model": "auto"` classifies each prompt (size, code, reasoning, tools…) and tries small, fast models for easy questions and the strongest ones for hard tasks, with automatic fallback to the other tiers. |
@@ -144,6 +144,8 @@ console.log(reply.choices[0]?.message.content);
 Every response carries `x-pourgate-provider` and `x-pourgate-model` headers so you can see who answered.
 
 See [Complexity routing](#-complexity-routing) for how `auto` picks a model.
+
+**Audio and images** are passed through with the same auth, quotas, key rotation, failover, privacy policy and logging: `POST /v1/audio/transcriptions` (multipart upload, up to `POURGATE_MAX_UPLOAD_MB`, default 25), `POST /v1/audio/speech` (binary audio is streamed back untouched) and `POST /v1/images/generations`. A model needs the matching registry capability (`transcription`, `speech`, `images`); `"model": "auto"` picks the least-used one. The shipped registry only lists Groq's Whisper models (ids unverified); add others with [overrides](registry). Audio is never logged, never shown to plugins and never cached; PII masking applies to the text sent to `speech` (`input`) and `images` (`prompt`), not to audio content. Limits expressed in audio seconds are not modeled.
 
 **Embeddings** use the same keys, limits, failover and privacy controls: `POST /v1/embeddings` with `"model": "auto"` (least-used embedding model) or a registry model with the `embeddings` capability. Embedding models never serve chat requests and vice versa.
 
@@ -306,6 +308,7 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_REGISTRY_URL` | | Bundle URL to sync the registry from. |
 | `POURGATE_REGISTRY_PUBKEY` | | Ed25519 public key (PEM or file path). When set, bundles **must** be signed. |
 | `POURGATE_REGISTRY_SYNC_HOURS` | `12` | Sync interval. |
+| `POURGATE_MAX_UPLOAD_MB` | `25` | Largest accepted audio upload. |
 | `POURGATE_PLUGINS_DIR` | `plugins` | Directory of trusted plugin modules ([docs](docs/PLUGINS.md)). |
 | `POURGATE_STATIC_DIR` | `public`, else `packages/client/dist` | Built dashboard directory. |
 
@@ -396,7 +399,7 @@ Found a vulnerability? Please open a private security advisory on GitHub rather 
 - [x] Plugin system (request hooks, observers, provider adapters)
 - [x] Embeddings endpoint
 - [x] Anthropic Messages endpoint
-- [ ] Images and audio endpoints
+- [x] Audio transcription, speech and image generation endpoints (pass-through)
 - [ ] Desktop app
 
 See [DESIGN.md](DESIGN.md) for the full vision, architecture and open questions.

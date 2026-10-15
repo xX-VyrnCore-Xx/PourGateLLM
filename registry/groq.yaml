@@ -16,3 +16,9 @@ models:
     capabilities: [chat, tools, json_mode]
     context: 131072
     limits: { rpm: 30, rpd: 14400, tpm: 6000, tpd: 500000 }
+  - id: whisper-large-v3-turbo
+    family: whisper-large-v3
+    capabilities: [transcription]
+  - id: whisper-large-v3
+    family: whisper-large-v3
+    capabilities: [transcription]

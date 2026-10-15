@@ -3,7 +3,7 @@ import { COMPLEXITY_TIER, TIER_ORDER, analyzePrompt, requiredCapabilities, type 
 import { rankScore, type ModelScore, type Strategy } from './evals.js';
 import { KeyPool } from './keypool.js';
 import type { ProviderAdapter } from './plugins.js';
-import { DEFAULT_PRIVACY, needsRedaction, providerAllowed, redactBody, redactEmbeddingBody, type PrivacyConfig } from './privacy.js';
+import { DEFAULT_PRIVACY, needsRedaction, providerAllowed, redactBody, redactTextFields, type PrivacyConfig } from './privacy.js';
 
 export interface Candidate {
   provider: ProviderEntry;
@@ -51,12 +51,30 @@ export function parseVirtual(requested: string): { forced: Tier | null } | undef
   return m ? { forced: m[1] as Tier } : undefined;
 }
 
-export type Endpoint = 'chat' | 'embeddings';
+export type Endpoint = 'chat' | 'embeddings' | 'transcription' | 'speech' | 'images';
 
-const ENDPOINT_PATH: Record<Endpoint, string> = { chat: '/chat/completions', embeddings: '/embeddings' };
+const ENDPOINT_PATH: Record<Endpoint, string> = {
+  chat: '/chat/completions',
+  embeddings: '/embeddings',
+  transcription: '/audio/transcriptions',
+  speech: '/audio/speech',
+  images: '/images/generations',
+};
+
+/** Request field holding user text that PII masking applies to, per non-chat endpoint. */
+const TEXT_FIELD: Record<Exclude<Endpoint, 'chat'>, string> = { embeddings: 'input', transcription: 'prompt', speech: 'input', images: 'prompt' };
+
+/** Registry capability a model needs to serve each endpoint. */
+const ENDPOINT_CAPABILITY: Record<Endpoint, string> = {
+  chat: 'chat',
+  embeddings: 'embeddings',
+  transcription: 'transcription',
+  speech: 'speech',
+  images: 'images',
+};
 
 export function listCandidates(registry: ProviderEntry[], requested: string, endpoint: Endpoint = 'chat'): Candidate[] {
-  const capability = endpoint === 'chat' ? 'chat' : 'embeddings';
+  const capability = ENDPOINT_CAPABILITY[endpoint] as ModelEntry['capabilities'][number];
   const all = registry.flatMap((provider) =>
     provider.models
       .filter((m) => m.capabilities.includes(capability))
@@ -117,6 +135,8 @@ export async function routeChat(
   requested: string,
   signal?: AbortSignal,
   endpoint: Endpoint = 'chat',
+  /** Multipart form for the transcription endpoint (the `model` field is replaced per attempt). */
+  form?: FormData,
 ): Promise<Response> {
   const privacy = deps.privacy ?? DEFAULT_PRIVACY;
   let candidates = listCandidates(deps.registry, requested, endpoint);
@@ -134,8 +154,8 @@ export async function routeChat(
   }
   const virtual = endpoint === 'chat' ? parseVirtual(requested) : undefined;
   let analysis: Analysis | undefined;
-  if (endpoint === 'embeddings' && requested === AUTO_MODEL) {
-    // Spread load: least used embedding model first, registry order on ties.
+  if (endpoint !== 'chat' && requested === AUTO_MODEL) {
+    // Spread load: least used model first, registry order on ties.
     const usage = (c: Candidate) => deps.pools.get(c.provider.provider)?.usageToday(c.model.id).requests ?? 0;
     candidates = candidates.map((c, i) => ({ c, i, u: usage(c) })).sort((a, b) => a.u - b.u || a.i - b.i).map((x) => x.c);
   }
@@ -170,7 +190,7 @@ export async function routeChat(
       if (!key) break;
       tried.add(key);
       const mask = needsRedaction(privacy.pii, provider);
-      if (mask) redacted ??= endpoint === 'chat' ? redactBody(body) : redactEmbeddingBody(body);
+      if (mask) redacted ??= endpoint === 'chat' ? redactBody(body) : redactTextFields(body, TEXT_FIELD[endpoint]);
       let res: Response;
       const attemptStart = Date.now();
       const attemptT0 = performance.now();
@@ -185,12 +205,21 @@ export async function routeChat(
           });
           res = await deps.fetch(built.url, { ...built.init, signal });
         } else {
-          res = await deps.fetch(`${provider.base_url.replace(/\/$/, '')}${ENDPOINT_PATH[endpoint]}`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-            body: JSON.stringify({ ...(mask ? redacted!.body : body), model: model.id }),
-            signal,
-          });
+          const url = `${provider.base_url.replace(/\/$/, '')}${ENDPOINT_PATH[endpoint]}`;
+          if (form) {
+            // Rebuild the multipart body per attempt so the fetch implementation sets the boundary itself.
+            const attempt = new FormData();
+            for (const [k, v] of form.entries()) if (k !== 'model') attempt.append(k, v);
+            attempt.set('model', model.id);
+            res = await deps.fetch(url, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: attempt, signal });
+          } else {
+            res = await deps.fetch(url, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+              body: JSON.stringify({ ...(mask ? redacted!.body : body), model: model.id }),
+              signal,
+            });
+          }
         }
       } catch (err) {
         deps.onAttempt?.({ provider: provider.provider, model: model.id, startMs: attemptStart, endMs: attemptStart + (performance.now() - attemptT0), status: null });

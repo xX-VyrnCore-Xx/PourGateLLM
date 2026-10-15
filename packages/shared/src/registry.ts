@@ -12,7 +12,7 @@ export const limitsSchema = z
 /** Rough capability class used by complexity routing: small = fast/cheap, large = strongest available. */
 export const tierSchema = z.enum(['small', 'medium', 'large']);
 
-export const capabilitySchema = z.enum(['chat', 'tools', 'json_mode', 'vision', 'embeddings']);
+export const capabilitySchema = z.enum(['chat', 'tools', 'json_mode', 'vision', 'embeddings', 'transcription', 'speech', 'images']);
 
 export const modelSchema = z
   .object({
