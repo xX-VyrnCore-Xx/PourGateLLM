@@ -294,7 +294,7 @@ Other MCP clients: URL `http://localhost:3000/mcp`, header `Authorization: Beare
 
 ## 🆓 Providers that need no key
 
-Providers marked `keyless: true` in the registry work out of the box, with **no account at all**: **Kilo** (anonymous free routes; prompts may be logged for training, so the privacy policy `no-training` excludes it), **OVHcloud AI Endpoints** (anonymous tier, strict per-IP limits), **LLM7** (its free "turbo" models) and **Pollinations** (one anonymous text model). That is 30 models. The gateway sends no `Authorization` header to them (a made-up bearer token is rejected, Kilo answers `INVALID_TOKEN`). Adding a real key later replaces the anonymous slot and usually lifts the limits. All four were verified with real requests on 2026-10-15; see [docs/PROVIDERS.md](docs/PROVIDERS.md) for what is verified, what is not, and how many tokens per month to expect.
+Providers marked `keyless: true` in the registry work out of the box, with **no account at all**: **Kilo** (anonymous free routes; prompts may be logged for training, so the privacy policy `no-training` excludes it), **OVHcloud AI Endpoints** (anonymous tier, strict per-IP limits), **LLM7** (its free "turbo" models), **Pollinations** (one anonymous text model) and **ch.at** (one anonymous model, not selectable). That is 31 models. The gateway sends no `Authorization` header to them (a made-up bearer token is rejected, Kilo answers `INVALID_TOKEN`). Adding a real key later replaces the anonymous slot and usually lifts the limits. All five were verified with real requests on 2026-10-15; see [docs/PROVIDERS.md](docs/PROVIDERS.md) for what is verified, what is not, and how many tokens per month to expect.
 
 ## 🔌 Your own endpoints and many keys
 

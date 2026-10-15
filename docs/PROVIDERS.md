@@ -10,6 +10,7 @@ Checked on **2026-10-15** from a cloud container, with `pourgate registry verify
 | OVHcloud AI Endpoints | no (anonymous) | 10 | **Verified**: 10 of 10 answered. One listed model (`Mistral-7B-Instruct-v0.3`) answers "no Route matched" and was removed |
 | LLM7 (turbo models) | no (anonymous) | 7 | **Verified**: 5 answered, 2 briefly rate-limited (1 request/second limit) |
 | Pollinations | no (anonymous) | 1 | **Verified** |
+| ch.at | no (anonymous) | 1 (model not selectable) | **Verified**: plain and streaming, 6/6 answers; hobby service, no SLA |
 | OpenRouter | yes | 13 `:free` | Reachable; the API rejects a bad key with a proper 401. Not run with a real key |
 | Groq | yes | 4 | same |
 | Cerebras | yes | 2 | same |
@@ -41,7 +42,7 @@ Per account, per month, only where a *token* quota is documented or seeded:
 | Requesty | 200 requests/day shared by free models | ~12M | request cap × ~2k tokens |
 | **Sum** | | **≈ 1,370M (≈ 370M without Mistral)** | |
 
-Not quantifiable: Kilo, OVH, LLM7, Pollinations (anonymous, limited per IP and per minute), OrcaRouter and BazaarLink (limits not published).
+Not quantifiable: Kilo, OVH, LLM7, Pollinations, ch.at (anonymous, limited per IP and per minute), OrcaRouter and BazaarLink (limits not published).
 
 What moves the number:
 
