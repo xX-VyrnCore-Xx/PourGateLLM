@@ -74,6 +74,13 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
               <Badge className="bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200">{t('disabled')}</Badge>
             )}
           </div>
+          {!p.enabled && p.signupUrl && (
+            <p className="mb-2 text-xs">
+              <a href={p.signupUrl} target="_blank" rel="noopener noreferrer" className="text-accent underline-offset-2 hover:underline">
+                {t('getKey')} ↗
+              </a>
+            </p>
+          )}
           {p.trainsOnPrompts && <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">{t('trainsOnPrompts')}</p>}
           <p className="mb-1 text-xs text-muted">{t('models')}</p>
           <ul className="space-y-1 text-sm">

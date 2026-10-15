@@ -39,6 +39,7 @@ export interface ProviderRow {
   keysFromEnv: number | null;
   keysCooling: number;
   trainsOnPrompts: boolean | null;
+  signupUrl?: string | null;
   models: {
     id: string;
     circuit: 'closed' | 'open' | 'half-open';

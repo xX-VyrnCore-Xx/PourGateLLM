@@ -283,6 +283,13 @@ Responses include `x-pourgate-complexity` (for `auto`) and `x-pourgate-tier` so 
 ## 🖼️ Dashboard
 
 <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/overview-dark.png">
+  <img src="docs/screenshots/overview-light.png" alt="Overview: setup checklist, provider health and ready-to-copy connection snippets" width="860">
+</picture>
+
+The **Overview** tab walks you through setup (add a key, create a token, send a request), shows which providers are online and gives copy-paste snippets for curl, Python and Node.js. Theme (system/light/dark) and language (English/Italian) can be switched from the header.
+
+<picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/tokens-dark.png">
   <img src="docs/screenshots/tokens-light.png" alt="Token management with per-client limits and usage" width="860">
 </picture>

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Preferences } from '../components/Preferences';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -27,6 +28,9 @@ export function Login({ onLogin }: { onLogin: () => void }) {
 
   return (
     <main className="mx-auto mt-24 max-w-sm px-4">
+      <div className="mb-3 flex justify-end">
+        <Preferences />
+      </div>
       <Card>
         <div className="mb-5 flex flex-col items-center gap-2">
           <img src="/logo.svg" alt="" className="h-14 w-14" />

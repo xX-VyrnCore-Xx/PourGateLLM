@@ -6,12 +6,11 @@
   --color-accent: oklch(0.55 0.2 265);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root { color-scheme: dark; }
-  @theme {
-    --color-border: oklch(0.3 0 0);
-    --color-muted: oklch(0.7 0 0);
-  }
+/* Dark mode is class-based so the user can override the system setting (see lib/theme.ts). */
+@custom-variant dark (&:where(.dark, .dark *));
+:root.dark {
+  --color-border: oklch(0.3 0 0);
+  --color-muted: oklch(0.7 0 0);
 }
 
 body {
