@@ -4,6 +4,7 @@
   "private": true,
   "description": "Experimental Tauri desktop wrapper for PourGateLLM (not part of the default build).",
   "scripts": {
-    "prepare:server": "node prepare.mjs"
+    "prepare:server": "node prepare.mjs",
+    "prepare:server:standalone": "node prepare.mjs --bundle-node"
   }
 }

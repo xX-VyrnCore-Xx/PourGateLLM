@@ -3,15 +3,39 @@
   "productName": "PourGateLLM",
   "version": "0.1.1",
   "identifier": "dev.pourgatellm.desktop",
-  "build": { "frontendDist": "../ui" },
+  "build": {
+    "frontendDist": "../ui"
+  },
   "app": {
-    "windows": [{ "title": "PourGateLLM", "width": 1200, "height": 800, "minWidth": 800, "minHeight": 560 }],
-    "security": { "csp": null }
+    "windows": [],
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/icon.png", "icons/icon.ico"],
-    "resources": { "server/": "server/" }
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "server/": "server/"
+    },
+    "publisher": "PourGateLLM",
+    "shortDescription": "Self-hosted gateway for free LLM tiers",
+    "longDescription": "Unifies the free tiers of many LLM providers behind one OpenAI-compatible API, with failover, prompt-complexity routing, per-client tokens and a dashboard.",
+    "category": "DeveloperTool",
+    "copyright": "MIT License",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "Italian"
+        ],
+        "displayLanguageSelector": true
+      }
+    }
   }
 }

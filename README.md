@@ -120,7 +120,7 @@ Uninstallers show what they will delete, ask for confirmation (`--yes` skips it)
 
 ### Testing
 
-`pnpm build && pnpm smoke` runs an end-to-end self-test with a fake provider (no keys needed), and `pourgate doctor [--live]` checks an installation. See [docs/TESTING.md](docs/TESTING.md) for the full guide.
+`pnpm build && pnpm smoke` runs an end-to-end self-test with a fake provider (no keys needed), and `pourgate doctor [--live]` checks an installation. See [docs/TESTING.md](docs/TESTING.md) for the guide and [docs/TEST-CHECKLIST.md](docs/TEST-CHECKLIST.md) for the complete checklist.
 
 ### CLI
 
