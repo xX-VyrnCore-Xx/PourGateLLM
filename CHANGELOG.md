@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Installers: `install/install.sh`, `install/install.ps1`, `install/install-docker.sh` and a `pourgate` launcher (`bin/pourgate.mjs`) shipped in the release tarball.
+- Windows installer build (`desktop-release.yml`, experimental).
+
 - Database: tuned pragmas, periodic optimize, graceful shutdown, `cli db stats|check|optimize|backup`, automatic pre-migration backup.
 - Release workflow can be started manually (`workflow_dispatch`) and creates the tag itself.
 - Dashboard playground (admin-only, streamed token by token) showing the route chosen for each prompt.

@@ -86,19 +86,44 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 
 ## 🚀 Quick start
 
-### With Docker
+Pick one. Each prints your dashboard password and API token on first run.
+
+| | Command |
+|---|---|
+| 🐳 **Docker** (published image) | `curl -fsSL https://raw.githubusercontent.com/xX-VyrnCore-Xx/PourGateLLM/main/install/install-docker.sh \| sh` |
+| 🐧🍎 **CLI**, Linux / macOS (Node ≥ 22.13) | `curl -fsSL https://raw.githubusercontent.com/xX-VyrnCore-Xx/PourGateLLM/main/install/install.sh \| sh` |
+| 🪟 **CLI**, Windows (Node ≥ 22.13) | `irm https://raw.githubusercontent.com/xX-VyrnCore-Xx/PourGateLLM/main/install/install.ps1 \| iex` |
+| 🪟 **Windows app** (experimental) | `.msi` / `.exe` attached to the [latest release](https://github.com/xX-VyrnCore-Xx/PourGateLLM/releases/latest), when present |
+
+### CLI
+
+After installing, `pourgate start` runs the gateway. Config lives in `~/.pourgate/config.env` (`pourgate env` prints the path): add your provider keys there and restart.
+
+```bash
+pourgate start
+pourgate tokens create --name laptop --rpm 30
+pourgate db backup --out backup.db
+```
+
+Re-run the installer to update; your config and data are kept.
+
+### Docker
+
+The installer creates `./pourgate` with a compose file and a generated `.env`, then starts the published image. By hand:
+
+```bash
+mkdir pourgate && cd pourgate
+curl -fsSLO https://raw.githubusercontent.com/xX-VyrnCore-Xx/PourGateLLM/main/install/docker-compose.yml
+# create .env (see .env.example), then:
+docker compose up -d
+```
+
+Or build from a clone:
 
 ```bash
 git clone https://github.com/xX-VyrnCore-Xx/PourGateLLM.git && cd PourGateLLM
 cp .env.example .env          # set POURGATE_TOKENS, POURGATE_ADMIN_PASSWORD and your provider keys
 docker compose up -d --build
-```
-
-Or run the prebuilt image from GitHub Packages (published on every release):
-
-```bash
-docker run -d --name pourgate -p 3000:3000 --env-file .env \
-  -v pourgate-data:/app/data ghcr.io/xx-vyrncore-xx/pourgatellm:latest
 ```
 
 Release tarballs (server + dashboard + registry) are attached to each [GitHub Release](https://github.com/xX-VyrnCore-Xx/PourGateLLM/releases).
