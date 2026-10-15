@@ -94,6 +94,14 @@ const MIGRATIONS: string[] = [
      error TEXT
    );
    CREATE INDEX idx_eval_results_ts ON eval_results(ts);`,
+  `CREATE TABLE observed_limits (
+     provider TEXT NOT NULL,
+     model TEXT NOT NULL,
+     limit_requests INTEGER,
+     limit_tokens INTEGER,
+     observed_at INTEGER NOT NULL,
+     PRIMARY KEY (provider, model)
+   );`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

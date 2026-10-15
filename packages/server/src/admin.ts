@@ -8,6 +8,7 @@ import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
 import type { KeyPool } from './keypool.js';
 import type { PluginHost } from './plugins.js';
+import { detectDrift, type ObservedLimits } from './ratelimits.js';
 import type { PoolManager } from './pools.js';
 import type { RequestLog } from './requestlog.js';
 import { SlidingWindow } from './ratelimit.js';
@@ -30,6 +31,7 @@ export interface AdminOptions {
   requestLog?: RequestLog;
   cache?: ResponseCache;
   plugins?: PluginHost;
+  observedLimits?: ObservedLimits;
   evals?: { runner: EvalRunner; store: EvalStore; strategy: Strategy; tasksPerModel: number; tasks: number };
   fetch?: typeof fetch;
   pools: Map<string, KeyPool>;
@@ -298,6 +300,10 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
             limits: m.limits,
             verifiedAt: m.verified_at ?? null,
             usageToday: pool?.usageToday(m.id) ?? { requests: 0, tokens: 0 },
+            observed: (() => {
+              const o = opts.observedLimits?.get(p.provider, m.id);
+              return o ? { limitRequests: o.limitRequests, limitTokens: o.limitTokens, observedAt: o.observedAt, drift: detectDrift(o, m.limits) } : null;
+            })(),
           })),
         };
       }),

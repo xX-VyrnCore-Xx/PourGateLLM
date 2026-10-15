@@ -328,6 +328,8 @@ docker compose exec pourgate node dist/cli.js tokens create --name laptop --rpm 
 
 Registry limits apply per **key and model**. `rpm`/`tpm` use a sliding 60 s window (in memory), while `rpd`/`tpd` are UTC-day counters and key cooldowns are persisted in SQLite, so they survive restarts. Cooldowns follow the provider's `Retry-After` (capped at 24 h). Keys are tracked by an HMAC fingerprint, never by their raw value.
 
+**Learning from provider headers.** Providers report their real limits in `x-ratelimit-*` response headers. PourGateLLM reads them on every upstream response to (1) **rest a key the moment its window is used up**, using the reset time the provider gives, instead of spending a request to hit a `429`; and (2) **remember the reported limits** per model. In the Providers tab a model whose reported limit matches none of the registry's `rpm`/`rpd`/`tpm`/`tpd` shows a ⚠ marker: that is a good moment to fix the registry file with a PR. (The reporting window differs by provider, so values are compared to all declared limits rather than guessed.)
+
 > [!NOTE]
 > Token limits (`tpm`/`tpd`) use the `usage.total_tokens` reported on **non-streaming** responses. Streamed responses count as requests only.
 

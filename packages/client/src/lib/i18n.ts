@@ -80,6 +80,8 @@ const en = {
   reliability: 'Reliability',
   samples: 'Samples',
   noScores: 'No eval results yet. Run evals to measure your models.',
+  reported: 'provider reports',
+  drift: 'registry may be outdated',
 } as const;
 
 export type Key = keyof typeof en;
@@ -164,6 +166,8 @@ const it: Record<Key, string> = {
   reliability: 'Affidabilità',
   samples: 'Campioni',
   noScores: 'Nessun risultato ancora. Avvia le eval per misurare i modelli.',
+  reported: 'il provider dichiara',
+  drift: 'registry forse non aggiornato',
 };
 
 const dictionaries: Record<string, Record<Key, string>> = { en, it };
