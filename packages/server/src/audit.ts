@@ -9,6 +9,7 @@ export type AuditAction =
   | 'token_create'
   | 'token_revoke'
   | 'provider_key_add'
+  | 'provider_key_update'
   | 'provider_key_remove'
   | 'registry_sync'
   | 'cache_clear'

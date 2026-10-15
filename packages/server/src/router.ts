@@ -1,3 +1,4 @@
+import { Breaker } from './breaker.js';
 import type { ModelEntry, ProviderEntry, Tier } from '@pourgate/shared';
 import { COMPLEXITY_TIER, TIER_ORDER, analyzePrompt, requiredCapabilities, type Analysis } from './complexity.js';
 import { rankScore, type ModelScore, type Strategy } from './evals.js';
@@ -25,6 +26,10 @@ export interface RouterDeps {
   observedLimits?: ObservedLimits;
   /** Plugin-provided adapters for non-OpenAI-compatible providers, by name. */
   adapters?: Map<string, ProviderAdapter>;
+  /** Skips targets that keep failing for a while (they are still tried last if nothing else answers). */
+  breaker?: Breaker;
+  /** Max wait for the upstream to start answering, in ms (default 60000). The body may stream for longer. */
+  timeoutMs?: number;
   /** Called after each upstream attempt (for tracing); never receives prompts. */
   onAttempt?: (a: AttemptInfo) => void;
 }
@@ -182,8 +187,17 @@ export async function routeChat(
     return errorResponse(404, `The model '${requested}' does not exist`, 'invalid_request_error', 'model_not_found');
   }
 
+  // Healthy targets first; ones whose circuit is open are only a last resort.
+  const targetId = (c: Candidate) => `${c.provider.provider}|${c.model.id}`;
+  if (deps.breaker) {
+    const healthy = candidates.filter((c) => !deps.breaker!.isOpen(targetId(c)));
+    candidates = [...healthy, ...candidates.filter((c) => deps.breaker!.isOpen(targetId(c)))];
+  }
+  const timeoutMs = deps.timeoutMs ?? 60_000;
+
   let redacted: { body: Record<string, unknown>; count: number } | undefined;
   for (const { provider, model } of candidates) {
+    const target = `${provider.provider}|${model.id}`;
     const pool = deps.pools.get(provider.provider);
     if (!pool) continue;
     const adapter = provider.adapter ? deps.adapters?.get(provider.adapter) : undefined;
@@ -197,6 +211,13 @@ export async function routeChat(
       const mask = needsRedaction(privacy.pii, provider);
       if (mask) redacted ??= endpoint === 'chat' ? redactBody(body) : redactTextFields(body, TEXT_FIELD[endpoint]);
       let res: Response;
+      // Abort an upstream that never starts answering; the timer stops once headers arrive so streams can run on.
+      const attemptAbort = new AbortController();
+      const onCallerAbort = () => attemptAbort.abort(signal?.reason);
+      if (signal?.aborted) onCallerAbort();
+      else signal?.addEventListener('abort', onCallerAbort, { once: true });
+      const timer = setTimeout(() => attemptAbort.abort(new Error('upstream timeout')), timeoutMs);
+      const attemptSignal = attemptAbort.signal;
       const attemptStart = Date.now();
       const attemptT0 = performance.now();
       try {
@@ -208,7 +229,7 @@ export async function routeChat(
             apiKey: key,
             stream: body.stream === true,
           });
-          res = await deps.fetch(built.url, { ...built.init, signal });
+          res = await deps.fetch(built.url, { ...built.init, signal: attemptSignal });
         } else {
           const url = `${provider.base_url.replace(/\/$/, '')}${ENDPOINT_PATH[endpoint]}`;
           if (form) {
@@ -216,22 +237,27 @@ export async function routeChat(
             const attempt = new FormData();
             for (const [k, v] of form.entries()) if (k !== 'model') attempt.append(k, v);
             attempt.set('model', model.id);
-            res = await deps.fetch(url, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: attempt, signal });
+            res = await deps.fetch(url, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: attempt, signal: attemptSignal });
           } else {
             res = await deps.fetch(url, {
               method: 'POST',
               headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
               body: JSON.stringify({ ...(mask ? redacted!.body : body), model: model.id }),
-              signal,
+              signal: attemptSignal,
             });
           }
         }
       } catch (err) {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onCallerAbort);
         deps.onAttempt?.({ provider: provider.provider, model: model.id, startMs: attemptStart, endMs: attemptStart + (performance.now() - attemptT0), status: null });
         if (signal?.aborted) throw err;
+        deps.breaker?.failure(target);
         if (!deps.softFail) pool.cooldown(key, 10_000);
         continue;
       }
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onCallerAbort);
       deps.onAttempt?.({ provider: provider.provider, model: model.id, startMs: attemptStart, endMs: attemptStart + (performance.now() - attemptT0), status: res.status });
       // Learn from the provider's own rate-limit headers: remember reported limits and rest a key that just
       // used up its window instead of spending a request to find out.
@@ -245,6 +271,7 @@ export async function routeChat(
         continue;
       }
       if (res.status >= 500) {
+        deps.breaker?.failure(target);
         if (!deps.softFail) pool.cooldown(key, 10_000);
         await res.body?.cancel();
         continue;
@@ -254,10 +281,12 @@ export async function routeChat(
           res = await adapter.parseResponse(res, { model: model.id, stream: body.stream === true });
         } catch {
           // A broken adapter must not take the gateway down: treat it like an upstream failure.
+          deps.breaker?.failure(target);
           pool.cooldown(key, 10_000);
           continue;
         }
       }
+      if (res.status !== 429) deps.breaker?.success(target);
       // Best-effort accounting of provider-reported tokens (non-streaming JSON responses only).
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
         void res

@@ -120,6 +120,8 @@ const MIGRATIONS: string[] = [
      detail TEXT
    );
    CREATE INDEX idx_audit_ts ON audit_log(ts);`,
+  `ALTER TABLE provider_keys ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;
+   ALTER TABLE provider_keys ADD COLUMN weight INTEGER NOT NULL DEFAULT 1;`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

@@ -4,6 +4,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { ProviderEntry } from '@pourgate/shared';
 import type { AuditLog } from './audit.js';
+import type { Breaker } from './breaker.js';
 import { KeyStoreError, type KeyStore } from './keys.js';
 import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
@@ -31,6 +32,7 @@ export interface AdminOptions {
   poolManager?: PoolManager;
   requestLog?: RequestLog;
   audit?: AuditLog;
+  breaker?: Breaker;
   /** Runs a chat request through the full gateway pipeline (routing, cache, failover) as the admin. */
   playground?: (body: Record<string, unknown>) => Response | Promise<Response>;
   cache?: ResponseCache;
@@ -320,10 +322,10 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     const entry = providerByName(c.req.param('name'));
     if (!entry) return c.json({ error: 'unknown provider' }, 404);
     if (!keyAdminReady()) return c.json({ error: 'key management is not configured' }, 404);
-    const b = (await c.req.json().catch(() => null)) as { key?: unknown; label?: unknown } | null;
+    const b = (await c.req.json().catch(() => null)) as { key?: unknown; label?: unknown; weight?: unknown } | null;
     if (typeof b?.key !== 'string') return c.json({ error: "'key' is required" }, 400);
     try {
-      const record = opts.keyStore!.add(entry.provider, b.key, typeof b.label === 'string' ? b.label : undefined);
+      const record = opts.keyStore!.add(entry.provider, b.key, typeof b.label === 'string' ? b.label : undefined, b.weight === undefined ? 1 : Number(b.weight));
       opts.poolManager!.refresh();
       opts.audit?.record('provider_key_add', { ip: clientIp(c), target: entry.provider, detail: `…${record.last4}` });
       return c.json(record, 201);
@@ -331,6 +333,31 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
       if (err instanceof KeyStoreError) return c.json({ error: err.message }, 400);
       throw err;
     }
+  });
+
+  // Rename a key, switch it off/on, or change its share of traffic. Disabled keys stay stored but are not used.
+  app.patch('/provider-keys/:id', async (c) => {
+    if (!keyAdminReady()) return c.json({ error: 'key management is not configured' }, 404);
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) return c.json({ error: 'invalid id' }, 400);
+    const b = (await c.req.json().catch(() => null)) as { label?: unknown; enabled?: unknown; weight?: unknown } | null;
+    if (!b || typeof b !== 'object') return c.json({ error: 'invalid body' }, 400);
+    if (b.label !== undefined && typeof b.label !== 'string') return c.json({ error: "'label' must be a string" }, 400);
+    if (b.enabled !== undefined && typeof b.enabled !== 'boolean') return c.json({ error: "'enabled' must be a boolean" }, 400);
+    try {
+      const ok = opts.keyStore!.update(id, {
+        label: b.label as string | undefined,
+        enabled: b.enabled as boolean | undefined,
+        weight: b.weight === undefined ? undefined : Number(b.weight),
+      });
+      if (!ok) return c.json({ error: 'not found' }, 404);
+    } catch (err) {
+      if (err instanceof KeyStoreError) return c.json({ error: err.message }, 400);
+      throw err;
+    }
+    opts.poolManager!.refresh();
+    opts.audit?.record('provider_key_update', { ip: clientIp(c), target: `#${id}`, detail: JSON.stringify({ enabled: b.enabled, weight: b.weight, renamed: b.label !== undefined }) });
+    return c.json(opts.keyStore!.list().find((k) => k.id === id));
   });
 
   app.delete('/provider-keys/:id', (c) => {
@@ -376,6 +403,7 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
           trainsOnPrompts: p.trains_on_prompts ?? null,
           models: p.models.map((m) => ({
             id: m.id,
+            circuit: opts.breaker?.state(`${p.provider}|${m.id}`) ?? 'closed',
             tier: m.tier ?? null,
             capabilities: m.capabilities,
             context: m.context ?? null,

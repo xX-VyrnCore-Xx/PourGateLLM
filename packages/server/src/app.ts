@@ -1,4 +1,5 @@
 import type { AuditLog } from './audit.js';
+import { Breaker } from './breaker.js';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
@@ -63,6 +64,10 @@ export interface AppOptions {
   /** Request metadata log (SQLite); enables analytics in the admin API. */
   requestLog?: RequestLog;
   audit?: AuditLog;
+  /** Circuit breaker shared by all routes (a default one is created when omitted). */
+  breaker?: Breaker;
+  /** Max wait for an upstream to start answering, in ms (default 60000). */
+  upstreamTimeoutMs?: number;
   /** Prometheus metrics registry; exposed at /metrics when `metricsToken` is also set. */
   metrics?: Metrics;
   metricsToken?: string;
@@ -94,6 +99,7 @@ function matchesAny(candidate: string, tokens: string[]): boolean {
 export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Principal } }> {
   const app = new Hono<{ Variables: { principal: Principal } }>();
   const doFetch = opts.fetch ?? fetch;
+  const breaker = opts.breaker ?? new Breaker();
   const envTokens = opts.envTokens ?? [];
   // Per-process secret that lets the admin playground call the gateway pipeline in-process.
   const internalSecret = randomBytes(32).toString('base64url');
@@ -105,7 +111,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     try {
       const timeout = AbortSignal.timeout(5000);
       const res = await routeChat(
-        { registry: getRegistry(), pools: opts.pools, fetch: doFetch, privacy, observedLimits: opts.observedLimits, softFail: true },
+        { registry: getRegistry(), pools: opts.pools, fetch: doFetch, privacy, observedLimits: opts.observedLimits, softFail: true, breaker, timeoutMs: opts.upstreamTimeoutMs },
         { model, input: text },
         model,
         signal ? AbortSignal.any([timeout, signal]) : timeout,
@@ -410,6 +416,8 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         privacy,
         scoring: opts.scoring,
         observedLimits: opts.observedLimits,
+        breaker,
+        timeoutMs: opts.upstreamTimeoutMs,
         adapters: opts.plugins?.adapters,
         onAttempt: tracer
           ? (a) =>
@@ -509,6 +517,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         poolManager: opts.poolManager,
         requestLog: opts.requestLog,
         audit: opts.audit,
+        breaker,
         playground: (body) =>
           app.fetch(
             new Request('http://internal.invalid/v1/chat/completions', {

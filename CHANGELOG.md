@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Provider keys: pause/resume and traffic weights (×1–×10) from the dashboard and `PATCH /admin/api/provider-keys/:id`.
+- Routing: per-model circuit breaker (`POURGATE_BREAKER_THRESHOLD`) and upstream timeout (`POURGATE_UPSTREAM_TIMEOUT_MS`); circuit state shown in the dashboard.
+
 - Desktop release workflow stamps the release version into the app so installer names match.
 
 ## 0.1.1

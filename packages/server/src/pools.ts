@@ -33,21 +33,24 @@ export class PoolManager {
     for (const name of [...this.pools.keys()]) if (!names.has(name)) this.pools.delete(name);
     for (const entry of this.entries) {
       const dbKeys =
-        this.keyStore?.secrets(entry.provider, (id) =>
+        this.keyStore?.active(entry.provider, (id) =>
           this.log(`[keys] could not decrypt stored key #${id} for ${entry.provider} (wrong master key?)`),
         ) ?? [];
-      const keys = [...new Set([...this.envKeys(entry), ...dbKeys])];
+      const weights = new Map<string, number>();
+      for (const k of this.envKeys(entry)) weights.set(k, 1);
+      for (const k of dbKeys) if (!weights.has(k.key)) weights.set(k.key, k.weight);
+      const keys = [...weights.keys()];
       const pool = this.pools.get(entry.provider);
       if (keys.length === 0) {
         this.pools.delete(entry.provider);
         if (!this.warned.has(entry.provider)) {
           this.warned.add(entry.provider);
-          this.log(`[registry] ${entry.provider}: no API key (${entry.api_key_env} or dashboard), provider disabled`);
+          this.log(`[registry] ${entry.provider}: no enabled API key (${entry.api_key_env} or dashboard), provider disabled`);
         }
       } else if (pool) {
-        pool.setKeys(keys);
+        pool.setKeys(keys, weights);
       } else {
-        this.pools.set(entry.provider, new KeyPool(keys, this.poolOptions(entry.provider)));
+        this.pools.set(entry.provider, new KeyPool(keys, { ...this.poolOptions(entry.provider), weights }));
       }
     }
   }
