@@ -1,0 +1,48 @@
+# Weekly: compares the registry with what providers really list and opens an issue when a model id has vanished.
+# Only providers with a public model list can be checked here; add repository secrets named like the registry's
+# `api_key_env` (e.g. GROQ_API_KEYS) to include the others.
+name: Registry check
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Compare registry with live model lists
+        id: check
+        env:
+          POURGATE_REGISTRY_DIR: ${{ github.workspace }}/registry
+          GROQ_API_KEYS: ${{ secrets.GROQ_API_KEYS }}
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+          MISTRAL_API_KEYS: ${{ secrets.MISTRAL_API_KEYS }}
+          CEREBRAS_API_KEYS: ${{ secrets.CEREBRAS_API_KEYS }}
+        run: |
+          set +e
+          pnpm --filter ./packages/server --silent cli registry check 2>/dev/null | tee report.txt
+          echo "stale=$(grep -c '^✗' report.txt)" >> "$GITHUB_OUTPUT"
+      - name: Open or update the issue
+        if: steps.check.outputs.stale != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="A provider no longer lists some registry models. Update \`registry/*.yaml\`.\n\n\`\`\`\n$(cat report.txt)\n\`\`\`"
+          n=$(gh issue list --state open --label registry --json number --jq '.[0].number // empty')
+          if [ -n "$n" ]; then gh issue comment "$n" --body "$(printf "$body")"
+          else gh issue create --title "Registry has models providers no longer list" --label registry --body "$(printf "$body")" || \
+               gh issue create --title "Registry has models providers no longer list" --body "$(printf "$body")"; fi
