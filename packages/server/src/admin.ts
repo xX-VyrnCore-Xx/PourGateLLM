@@ -31,6 +31,8 @@ export interface AdminOptions {
   poolManager?: PoolManager;
   requestLog?: RequestLog;
   audit?: AuditLog;
+  /** Runs a chat request through the full gateway pipeline (routing, cache, failover) as the admin. */
+  playground?: (body: Record<string, unknown>) => Response | Promise<Response>;
   cache?: ResponseCache;
   plugins?: PluginHost;
   observedLimits?: ObservedLimits;
@@ -230,6 +232,47 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     const cleared = opts.cache.clear();
     opts.audit?.record('cache_clear', { ip: clientIp(c), detail: `${cleared} entries` });
     return c.json({ cleared });
+  });
+
+  const playLimiter = new SlidingWindow(60_000, now);
+  app.post('/playground', async (c) => {
+    if (!opts.playground) return c.json({ error: 'playground is not available' }, 404);
+    if (!playLimiter.take('play', 30)) return c.json({ error: 'too many requests' }, 429);
+    const b = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (typeof b?.model !== 'string' || !b.model) return c.json({ error: "'model' is required" }, 400);
+    if (!Array.isArray(b.messages) || b.messages.length === 0 || b.messages.length > 50) {
+      return c.json({ error: "'messages' must be a non-empty array (max 50)" }, 400);
+    }
+    const started = now();
+    const res = await opts.playground({
+      model: b.model,
+      messages: b.messages,
+      max_tokens: Math.min(1024, Math.max(1, Number(b.max_tokens) || 512)),
+      stream: false,
+    });
+    const data = (await res.json().catch(() => null)) as {
+      choices?: { message?: { content?: unknown } }[];
+      usage?: { total_tokens?: number };
+      error?: { message?: string };
+    } | null;
+    const h = (name: string) => res.headers.get(name);
+    const content = data?.choices?.[0]?.message?.content;
+    opts.audit?.record('playground', { ip: clientIp(c), target: b.model });
+    return c.json({
+      ok: res.ok,
+      status: res.status,
+      content: typeof content === 'string' ? content : null,
+      error: res.ok ? null : (data?.error?.message ?? res.statusText),
+      tokens: data?.usage?.total_tokens ?? null,
+      elapsedMs: now() - started,
+      route: {
+        provider: h('x-pourgate-provider'),
+        model: h('x-pourgate-model'),
+        tier: h('x-pourgate-tier'),
+        complexity: h('x-pourgate-complexity'),
+        cache: h('x-pourgate-cache'),
+      },
+    });
   });
 
   app.get('/audit', (c) => {

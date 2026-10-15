@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Dashboard playground (admin-only, non-streaming) showing the route chosen for each prompt.
 - Admin audit log (API `GET /admin/api/audit` and dashboard tab).
 - Experimental Tauri desktop scaffold.
 

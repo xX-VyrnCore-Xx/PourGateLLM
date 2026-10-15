@@ -12,7 +12,8 @@ export type AuditAction =
   | 'provider_key_remove'
   | 'registry_sync'
   | 'cache_clear'
-  | 'eval_run';
+  | 'eval_run'
+  | 'playground';
 
 export interface AuditEntry {
   id: number;

@@ -63,6 +63,7 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 | 🗂️ **Open model registry** | YAML catalog with local overrides and optional signed, auto-syncing bundles. |
 | 🔐 **Encrypted provider keys** | AES-256-GCM in SQLite, bound to the provider; the UI only ever shows the last 4 characters. |
 | 🧾 **Admin audit log** | Logins (including failures), token and key changes, registry syncs and cache clears are recorded without secrets, kept 180 days and shown in the dashboard. |
+| 🧪 **Playground** | Try prompts from the dashboard against `auto`, a tier or a specific model and see where the router sent each one. |
 | 🐳 **Self-hosting ready** | Docker image and Compose file, one SQLite file, zero external services. |
 
 <details>
