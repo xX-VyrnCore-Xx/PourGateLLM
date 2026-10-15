@@ -2,6 +2,7 @@ import type { AuditLog } from './audit.js';
 import { Breaker } from './breaker.js';
 import { LatencyTracker } from './latency.js';
 import type { CustomProviders } from './customproviders.js';
+import { handleBody, type McpBackend } from './mcp.js';
 import { Profiles, StickyStore } from './profiles.js';
 import { BadRequest, completionsToChat, openaiError, responsesToChat, wrapCompletions, wrapResponses } from './openai-extra.js';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -595,6 +596,31 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   app.post('/v1/audio/transcriptions', (c) => handle(c, 'transcription'));
   app.post('/v1/audio/speech', (c) => handle(c, 'speech'));
   app.post('/v1/images/generations', (c) => handle(c, 'images'));
+
+  // Model Context Protocol endpoint (Streamable HTTP, stateless). It lives under /v1 to share authentication,
+  // size limits and rate limits; /mcp is an alias for clients that expect that path.
+  app.post('/v1/mcp', async (c) => {
+    const auth = c.req.header('authorization') ?? (c.req.header('x-api-key') ? `Bearer ${c.req.header('x-api-key')}` : '');
+    const backend: McpBackend = {
+      version: process.env.POURGATE_VERSION ?? 'dev',
+      models: () => [...VIRTUAL_MODELS, 'fusion', ...(opts.profiles?.names().map((n) => `auto:${n}`) ?? []), ...new Set(getRegistry().flatMap((p) => p.models.filter((m) => m.capabilities.includes('chat')).map((m) => m.id)))],
+      providers: () => getRegistry().map((p) => ({ provider: p.provider, enabled: opts.pools.has(p.provider), models: p.models.length, keyless: p.keyless === true })),
+      chat: async (body) => {
+        const res = await app.fetch(new Request(new URL('/v1/chat/completions', c.req.url), { method: 'POST', headers: { 'content-type': 'application/json', authorization: auth }, body: JSON.stringify(body) }));
+        const json = (await res.json().catch(() => null)) as { choices?: { message?: { content?: unknown; reasoning?: unknown } }[]; error?: { message?: string } } | null;
+        if (!res.ok) return { ok: false, error: json?.error?.message ?? `request failed (${res.status})` };
+        const m = json?.choices?.[0]?.message;
+        const out = typeof m?.content === 'string' && m.content ? m.content : typeof m?.reasoning === 'string' ? m.reasoning : '';
+        return { ok: true, text: out, provider: res.headers.get('x-pourgate-provider'), model: res.headers.get('x-pourgate-model') };
+      },
+    };
+    const body = await c.req.json().catch(() => undefined);
+    if (body === undefined) return c.json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400);
+    const r = await handleBody(body, backend);
+    return r.json === undefined ? c.body(null, r.status as 202) : c.json(r.json as object, r.status as 200);
+  });
+  app.get('/v1/mcp', (c) => c.body(null, 405, { allow: 'POST' }));
+  app.all('/mcp', (c) => app.fetch(new Request(new URL('/v1/mcp', c.req.url), c.req.raw)));
 
   // Legacy completions (editor autocomplete) and the Responses API (Codex CLI) on top of chat completions.
   const translated = (convert: (b: Record<string, unknown>) => Record<string, unknown>, wrap: (r: Response, model: string) => Promise<Response>) =>

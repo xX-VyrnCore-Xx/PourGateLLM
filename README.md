@@ -271,6 +271,16 @@ export OPENAI_BASE_URL=http://localhost:3000/v1 OPENAI_API_KEY=<your token>
 codex --model auto          # Codex CLI through the gateway
 ```
 
+## 🛠️ MCP server
+
+The gateway is also an [MCP](https://modelcontextprotocol.io) server (Streamable HTTP, stateless) at `POST /mcp` (alias `/v1/mcp`), authenticated with a normal client token. Tools: `chat` (ask a free model; `auto`, `fusion`, `auto:<profile>` or an exact id), `list_models`, `provider_status`. Calls run through the regular pipeline with the caller's token, so quotas, failover and the audit log apply.
+
+```bash
+claude mcp add --transport http pourgate http://localhost:3000/mcp --header "Authorization: Bearer <your token>"
+```
+
+Other MCP clients: URL `http://localhost:3000/mcp`, header `Authorization: Bearer <token>`. Not supported: server-sent streams (GET returns 405), resources and prompts.
+
 ## 🆓 Providers that need no key
 
 Providers marked `keyless: true` in the registry work out of the box: **Kilo** (anonymous free routes, prompts may be logged for training: the privacy policy `no-training` excludes it) and **OVHcloud AI Endpoints** (anonymous tier, about 2 requests/minute per IP, unmeasured). The gateway sends no `Authorization` header to them. Adding a real key later replaces the anonymous slot and usually lifts the limits. Verified on 2026-10-15 with a real request through the gateway to each of them.

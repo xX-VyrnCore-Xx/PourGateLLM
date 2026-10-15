@@ -29,7 +29,8 @@ Open, signed, self-updating registry (no paid catalog); per-client tokens with q
 | Named fallback-chain profiles (`auto:<profile>`) and sticky sessions | **done** (file-based `profiles.yaml`, `x-pourgate-session` header; no dashboard editor yet) |
 | Dashboard form to add a custom OpenAI-compatible endpoint | **done** (model auto-detection, stored in the database) |
 | Bulk key import | **done** (paste many keys; no export, no periodic health check — the per-key test button exists) |
-| Native Gemini and Ollama API surfaces, MCP server | not implemented |
+| MCP server | **done** (`/mcp`: chat, list_models, provider_status; no resources/prompts, no SSE stream) |
+| Native Gemini and Ollama API surfaces | not implemented |
 | Keyless providers (Kilo anonymous, OVH, AI Horde) | **done** for Kilo and OVH (real request verified); AI Horde needs its own queue adapter, not implemented |
 | Prompt compression pipeline | not implemented |
 | macOS / mobile apps | Windows app only |

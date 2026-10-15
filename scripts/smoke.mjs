@@ -175,6 +175,14 @@ try {
     const res = await chat({ model: 'my-model', messages: [{ role: 'user', content: 'custom uniq-5' }] });
     assert(res.status === 200 && res.headers.get('x-pourgate-provider') === 'mine', `custom served by ${res.headers.get('x-pourgate-provider')}`);
   });
+  await step('the MCP endpoint lists tools and runs a chat', async () => {
+    const h = { 'content-type': 'application/json', authorization: 'Bearer pg-smoke' };
+    const rpc = async (body) => (await fetch(`${base}/mcp`, { method: 'POST', headers: h, body: JSON.stringify(body) })).json();
+    const init = await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } });
+    assert(init.result?.serverInfo?.name === 'pourgatellm', `initialize ${JSON.stringify(init)}`);
+    const call = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'chat', arguments: { prompt: 'mcp uniq-6', model: 'fake-large' } } });
+    assert(call.result?.content?.[0]?.text?.includes('pong'), `tools/call ${JSON.stringify(call)}`);
+  });
   await step('the dashboard is served', async () => {
     const res = await fetch(`${base}/`);
     assert(res.ok && (await res.text()).includes('<div id="root">'), 'dashboard not served');
