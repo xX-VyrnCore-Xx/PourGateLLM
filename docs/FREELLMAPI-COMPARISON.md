@@ -33,4 +33,5 @@ Open, signed, self-updating registry (no paid catalog); per-client tokens with q
 | Native Gemini and Ollama API surfaces | **done** (text, images, tools, streaming; no embeddings, no model management) |
 | Keyless providers (Kilo anonymous, OVH, AI Horde) | **done** for Kilo and OVH (real request verified); AI Horde needs its own queue adapter, not implemented |
 | Prompt compression pipeline | **done**, simpler (whitespace, JSON, duplicates, long tool output, optional history trimming; no semantic dedupe) |
-| macOS / mobile apps | Windows app only |
+| macOS app | **workflow added** (`desktop-release.yml` builds an unsigned Apple-Silicon DMG); never run on a Mac |
+| Mobile apps | installable dashboard (PWA) instead of store apps; no native iOS/Android app |

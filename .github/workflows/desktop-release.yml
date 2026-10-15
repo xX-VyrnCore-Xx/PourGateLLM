@@ -1,5 +1,5 @@
 name: Desktop release
-# Builds the Windows installers (MSI + NSIS) and attaches them to an existing release.
+# Builds the Windows installers (MSI + NSIS) and the macOS app (DMG, Apple Silicon) and attaches them to an existing release.
 on:
   workflow_dispatch:
     inputs:
@@ -59,3 +59,52 @@ jobs:
           subject-path: |
             packages/desktop/src-tauri/target/release/bundle/PourGateLLM-*.msi
             packages/desktop/src-tauri/target/release/bundle/PourGateLLM-*.exe
+
+  macos:
+    # Unsigned, ad-hoc signed build: macOS asks you to confirm the first launch (right-click > Open).
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Stamp the release version and the macOS icon set into the app
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+          node -e "const f='packages/desktop/src-tauri/tauri.conf.json';const fs=require('fs');const c=JSON.parse(fs.readFileSync(f,'utf8'));c.version=process.env.VERSION;c.bundle.icon=[...c.bundle.icon,'icons/icon.icns'];fs.writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Prepare the app with its own Node.js runtime
+        run: pnpm --filter @pourgate/desktop prepare:server:standalone
+      - run: cargo install tauri-cli --version "^2" --locked
+      - name: Generate the .icns icon
+        run: cargo tauri icon icons/icon.png --output icons
+        working-directory: packages/desktop/src-tauri
+      - run: cargo tauri build --bundles app,dmg
+        working-directory: packages/desktop/src-tauri
+        env:
+          APPLE_SIGNING_IDENTITY: '-'
+      - name: Attach the DMG to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -e
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+          cd packages/desktop/src-tauri/target/release/bundle
+          for f in dmg/*.dmg; do
+            cp "$f" "PourGateLLM-${VERSION}-macos-$(basename "$f")"
+          done
+          shasum -a 256 PourGateLLM-*.dmg > SHA256SUMS-macos-app.txt
+          gh release upload "v$VERSION" PourGateLLM-*.dmg SHA256SUMS-macos-app.txt --clobber --repo "$GITHUB_REPOSITORY"
+      - name: Attest the DMG build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: packages/desktop/src-tauri/target/release/bundle/PourGateLLM-*.dmg
