@@ -1,0 +1,10 @@
+# Named fallback chains. Save as profiles.yaml (or point POURGATE_PROFILES_FILE at it) and restart.
+# Ask for one with  "model": "auto:coding"  (also accepted: "profile:coding").
+# A bare id means "this model on whichever provider serves it"; use { provider, model } to pin one.
+coding:
+  - llama-3.3-70b-versatile
+  - { provider: openrouter, model: "nvidia/nemotron-3-super-120b-a12b:free" }
+  - gemini-2.5-flash
+fast:
+  - llama-3.1-8b-instant
+  - { provider: openrouter, model: "liquid/lfm-2.5-2.6b:free" }

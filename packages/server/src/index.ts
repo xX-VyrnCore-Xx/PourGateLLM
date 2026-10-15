@@ -19,6 +19,7 @@ import { SemanticIndex } from './semantic.js';
 import { ObservedLimits } from './ratelimits.js';
 import { AuditLog } from './audit.js';
 import { Breaker } from './breaker.js';
+import { loadProfiles } from './profiles.js';
 import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
 import { SqliteUsage, makeFingerprint, pruneUsage } from './usage.js';
@@ -166,6 +167,18 @@ if (!adminPassword) {
 const host = process.env.POURGATE_HOST || '127.0.0.1';
 const exposed = !['127.0.0.1', 'localhost', '::1'].includes(host);
 
+// Named fallback chains (`auto:<name>`); a missing file simply means none are defined.
+const profilesFile = resolve(process.env.POURGATE_PROFILES_FILE ?? 'profiles.yaml');
+const profiles = (() => {
+  try {
+    return loadProfiles(profilesFile);
+  } catch (e) {
+    console.error(`Cannot read profiles: ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+  }
+})();
+if (profiles.names().length > 0) console.log(`Profiles: ${profiles.names().map((n) => `auto:${n}`).join(', ')}`);
+
 const port = Number(process.env.PORT ?? 3000);
 const server = serve(
   {
@@ -183,6 +196,7 @@ const server = serve(
       maxBodyBytes: Math.max(1, Number(process.env.POURGATE_MAX_BODY_MB ?? 20)) * 1024 * 1024,
       maxUploadBytes: Math.max(1, Number(process.env.POURGATE_MAX_UPLOAD_MB ?? 25)) * 1024 * 1024,
       plugins,
+      profiles,
       breaker: new Breaker({ threshold: Math.max(1, Number(process.env.POURGATE_BREAKER_THRESHOLD ?? 5)) }),
       upstreamTimeoutMs: Math.max(1000, Number(process.env.POURGATE_UPSTREAM_TIMEOUT_MS ?? 60_000)),
       tracer,

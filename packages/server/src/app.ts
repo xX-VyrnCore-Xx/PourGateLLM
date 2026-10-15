@@ -1,6 +1,7 @@
 import type { AuditLog } from './audit.js';
 import { Breaker } from './breaker.js';
 import { LatencyTracker } from './latency.js';
+import { Profiles, StickyStore } from './profiles.js';
 import { BadRequest, completionsToChat, openaiError, responsesToChat, wrapCompletions, wrapResponses } from './openai-extra.js';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -71,6 +72,10 @@ export interface AppOptions {
   breaker?: Breaker;
   /** Remembers how fast each target answers so quicker ones are preferred (a default one is created when omitted). */
   latency?: LatencyTracker;
+  /** Named fallback chains, requested as `auto:<name>`. */
+  profiles?: Profiles;
+  /** Keeps a conversation (header `x-pourgate-session`) on the model that served it last. */
+  sticky?: StickyStore;
   /** Max wait for an upstream to start answering, in ms (default 60000). */
   upstreamTimeoutMs?: number;
   /** Prometheus metrics registry; exposed at /metrics when `metricsToken` is also set. */
@@ -106,6 +111,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   const doFetch = opts.fetch ?? fetch;
   const breaker = opts.breaker ?? new Breaker();
   const latency = opts.latency ?? new LatencyTracker();
+  const sticky = opts.sticky ?? new StickyStore();
   const inflight = new Map<string, Promise<CachedResponse | undefined>>();
   const envTokens = opts.envTokens ?? [];
   // Per-process secret that lets the admin playground call the gateway pipeline in-process.
@@ -233,13 +239,21 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
 
   app.get('/v1/models', (c) => {
     const data = [
-      ...VIRTUAL_MODELS.map((id) => ({ id, object: 'model', created: 0, owned_by: 'pourgate' })),
+      ...[...VIRTUAL_MODELS, ...(opts.profiles?.names().map((n) => `auto:${n}`) ?? [])].map((id) => ({ id, object: 'model', created: 0, owned_by: 'pourgate' })),
       ...getRegistry().flatMap((p) =>
         p.models.map((m) => ({ id: m.id, object: 'model', created: 0, owned_by: p.provider })),
       ),
     ];
     return c.json({ object: 'list', data });
   });
+
+  /** Conversation key from the `x-pourgate-session` header, scoped to the caller so sessions never leak across clients. */
+  const sessionKeyOf = (c: Context<{ Variables: { principal: Principal } }>): string | undefined => {
+    const id = c.req.header('x-pourgate-session')?.trim();
+    if (!id || id.length > 128) return undefined;
+    const p = c.get('principal');
+    return `${p.kind === 'client' ? `c${p.record.id}` : 'env'}:${id}`;
+  };
 
   const handle = async (
     c: Context<{ Variables: { principal: Principal } }>,
@@ -481,6 +495,9 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         observedLimits: opts.observedLimits,
         breaker,
         latency,
+        profiles: opts.profiles,
+        sticky,
+        sessionKey: sessionKeyOf(c),
         timeoutMs: opts.upstreamTimeoutMs,
         adapters: opts.plugins?.adapters,
         onAttempt: tracer
