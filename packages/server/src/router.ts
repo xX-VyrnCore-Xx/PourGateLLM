@@ -3,6 +3,7 @@ import type { ModelEntry, ProviderEntry, Tier } from '@pourgate/shared';
 import { COMPLEXITY_TIER, TIER_ORDER, analyzePrompt, requiredCapabilities, type Analysis } from './complexity.js';
 import { rankScore, type ModelScore, type Strategy } from './evals.js';
 import { KeyPool } from './keypool.js';
+import type { LatencyTracker } from './latency.js';
 import { exhaustedFor, parseRateLimitHeaders, type ObservedLimits } from './ratelimits.js';
 import type { ProviderAdapter } from './plugins.js';
 import { DEFAULT_PRIVACY, needsRedaction, providerAllowed, redactBody, redactTextFields, type PrivacyConfig } from './privacy.js';
@@ -28,6 +29,8 @@ export interface RouterDeps {
   adapters?: Map<string, ProviderAdapter>;
   /** Skips targets that keep failing for a while (they are still tried last if nothing else answers). */
   breaker?: Breaker;
+  /** Learns how fast each target answers; faster ones go first among otherwise equal candidates. */
+  latency?: LatencyTracker;
   /** Max wait for the upstream to start answering, in ms (default 60000). The body may stream for longer. */
   timeoutMs?: number;
   /** Called after each upstream attempt (for tracing); never receives prompts. */
@@ -106,6 +109,7 @@ export function rankCandidates(
   analysis: Analysis,
   usageToday: (c: Candidate) => number,
   scoring?: Scoring,
+  latencyBucket: (c: Candidate) => number = () => 0,
 ): Candidate[] {
   const caps = requiredCapabilities(analysis.needs);
   const order = TIER_ORDER[preferred];
@@ -117,9 +121,10 @@ export function rankCandidates(
       c,
       i,
       usage: usageToday(c),
+      slow: latencyBucket(c),
       score: scoring ? rankScore(scoring.strategy, scoring.score(c.provider.provider, c.model.id)) : 0,
     }))
-    .sort((a, b) => tierRank(a.c) - tierRank(b.c) || b.score - a.score || a.usage - b.usage || a.i - b.i)
+    .sort((a, b) => tierRank(a.c) - tierRank(b.c) || b.score - a.score || a.slow - b.slow || a.usage - b.usage || a.i - b.i)
     .map((x) => x.c);
 }
 
@@ -167,13 +172,13 @@ export async function routeChat(
   if (endpoint !== 'chat' && requested === AUTO_MODEL) {
     // Spread load: least used model first, registry order on ties.
     const usage = (c: Candidate) => deps.pools.get(c.provider.provider)?.usageToday(c.model.id).requests ?? 0;
-    candidates = candidates.map((c, i) => ({ c, i, u: usage(c) })).sort((a, b) => a.u - b.u || a.i - b.i).map((x) => x.c);
+    candidates = candidates.map((c, i) => ({ c, i, u: usage(c), s: deps.latency?.bucket(`${c.provider.provider}|${c.model.id}`) ?? 0 })).sort((a, b) => a.s - b.s || a.u - b.u || a.i - b.i).map((x) => x.c);
   }
   if (virtual) {
     analysis = analyzePrompt(body);
     const preferred = virtual.forced ?? COMPLEXITY_TIER[analysis.complexity];
     const total = candidates.length;
-    candidates = rankCandidates(candidates, preferred, analysis, (c) => deps.pools.get(c.provider.provider)?.usageToday(c.model.id).requests ?? 0, deps.scoring);
+    candidates = rankCandidates(candidates, preferred, analysis, (c) => deps.pools.get(c.provider.provider)?.usageToday(c.model.id).requests ?? 0, deps.scoring, (c) => deps.latency?.bucket(`${c.provider.provider}|${c.model.id}`) ?? 0);
     if (candidates.length === 0 && total > 0) {
       return errorResponse(
         400,
@@ -253,6 +258,7 @@ export async function routeChat(
         deps.onAttempt?.({ provider: provider.provider, model: model.id, startMs: attemptStart, endMs: attemptStart + (performance.now() - attemptT0), status: null });
         if (signal?.aborted) throw err;
         deps.breaker?.failure(target);
+        deps.latency?.record(target, timeoutMs);
         if (!deps.softFail) pool.cooldown(key, 10_000);
         continue;
       }
@@ -272,6 +278,7 @@ export async function routeChat(
       }
       if (res.status >= 500) {
         deps.breaker?.failure(target);
+        deps.latency?.record(target, timeoutMs);
         if (!deps.softFail) pool.cooldown(key, 10_000);
         await res.body?.cancel();
         continue;
@@ -287,6 +294,7 @@ export async function routeChat(
         }
       }
       if (res.status !== 429) deps.breaker?.success(target);
+      if (res.ok) deps.latency?.record(target, performance.now() - attemptT0);
       // Best-effort accounting of provider-reported tokens (non-streaming JSON responses only).
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
         void res

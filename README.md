@@ -270,7 +270,7 @@ msg = client.messages.create(model="claude-sonnet-4-5", max_tokens=200,
 | Request shape | tool use, strict JSON schema, large `max_tokens`, `reasoning_effort` |
 | Simplicity | short greetings, definitions, translations lower the score |
 
-The score maps to `easy → small`, `medium → medium`, `hard → large`, using the `tier` hint of each model in the [registry](registry). The tier is a **preference, not a filter**: if the preferred tier has no budget left, the next ones take over. Within a tier the model that served the fewest requests today goes first, which spreads load across providers.
+The score maps to `easy → small`, `medium → medium`, `hard → large`, using the `tier` hint of each model in the [registry](registry). The tier is a **preference, not a filter**: if the preferred tier has no budget left, the next ones take over. Within a tier the order is: measured quality score (when evals ran), then **response speed**, then the model that served the fewest requests today (which spreads load across providers). Speed is a smoothed time-to-first-byte per model, grouped in coarse steps (under 0.4 s, 0.4–0.8 s, 0.8–1.6 s …) so normal jitter never reshuffles the order; a model that just failed counts as slow, and measurements older than 5 minutes are forgotten so it gets another chance. The Providers page shows each model's current latency.
 
 Models that cannot serve the request are skipped (missing `tools` / `json_mode` / `vision` capability, or a context window that is too small); if none can, you get a clear `400 no_capable_model`.
 
@@ -492,7 +492,7 @@ Registry entries decide **where your API keys are sent**, so remote data is trea
 - Registry sync hardened against endpoint hijacking, rollback and oversized payloads.
 - **Safe by default**: listens on `127.0.0.1` only, strict dashboard CSP and security headers, failed-auth throttling, weak dashboard passwords refused, hardened container.
 - **Verifiable releases**: published checksums (checked by the installers) and signed build-provenance attestations.
-- **Always current**: Dependabot with auto-merged minor/patch updates, CodeQL and dependency review on every pull request.
+- **Always current**: Dependabot with auto-merged minor/patch updates, CodeQL, dependency review and a production `pnpm audit` on every pull request; the registry is re-checked against the providers' live model lists every week.
 
 Found a vulnerability? Please report it privately, see [SECURITY.md](SECURITY.md) (it also has a hardening checklist for operators).
 
