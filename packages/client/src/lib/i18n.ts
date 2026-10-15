@@ -2,6 +2,31 @@ import { useSyncExternalStore } from 'react';
 
 const en = {
   appName: 'PourGateLLM',
+  overview: 'Overview',
+  gettingStarted: 'Getting started',
+  stepAddKey: 'Add a provider API key',
+  stepAddKeyHint: 'Open the Providers tab and paste a key. Free keys are available from the links there.',
+  stepToken: 'Create a client token',
+  stepTokenHint: 'Each app or person gets its own token with limits.',
+  stepRequest: 'Send your first request',
+  stepRequestHint: 'Use the snippet below or the Playground.',
+  connect: 'Connect your app',
+  connectHint: 'Any OpenAI-compatible client works: set the base URL and use one of your tokens.',
+  baseUrl: 'Base URL',
+  copyCode: 'Copy',
+  providersHealth: 'Providers',
+  noKeyYet: 'no key yet',
+  getKey: 'Get a key',
+  allSet: 'Everything is set up.',
+  statProviders: 'Providers online',
+  statKeys: 'API keys',
+  statRequests: 'Requests (24h)',
+  statErrors: 'Error rate (24h)',
+  theme: 'Theme',
+  themeSystem: 'System',
+  themeLight: 'Light',
+  themeDark: 'Dark',
+  language: 'Language',
   login: 'Sign in',
   password: 'Admin password',
   logout: 'Sign out',
@@ -104,6 +129,31 @@ export type Key = keyof typeof en;
 
 const it: Record<Key, string> = {
   appName: 'PourGateLLM',
+  overview: 'Panoramica',
+  gettingStarted: 'Per iniziare',
+  stepAddKey: 'Aggiungi una chiave API di un provider',
+  stepAddKeyHint: 'Apri la scheda Provider e incolla una chiave. Qui trovi i link per ottenerne di gratuite.',
+  stepToken: 'Crea un token per i client',
+  stepTokenHint: 'Ogni app o persona ha il suo token con i suoi limiti.',
+  stepRequest: 'Invia la prima richiesta',
+  stepRequestHint: 'Usa l\'esempio qui sotto o il Playground.',
+  connect: 'Collega la tua app',
+  connectHint: 'Funziona con qualsiasi client compatibile OpenAI: imposta l\'URL base e usa uno dei tuoi token.',
+  baseUrl: 'URL base',
+  copyCode: 'Copia',
+  providersHealth: 'Provider',
+  noKeyYet: 'nessuna chiave',
+  getKey: 'Ottieni una chiave',
+  allSet: 'Tutto pronto.',
+  statProviders: 'Provider attivi',
+  statKeys: 'Chiavi API',
+  statRequests: 'Richieste (24h)',
+  statErrors: 'Tasso di errore (24h)',
+  theme: 'Tema',
+  themeSystem: 'Sistema',
+  themeLight: 'Chiaro',
+  themeDark: 'Scuro',
+  language: 'Lingua',
   login: 'Accedi',
   password: 'Password admin',
   logout: 'Esci',
@@ -203,13 +253,39 @@ const it: Record<Key, string> = {
 };
 
 const dictionaries: Record<string, Record<Key, string>> = { en, it };
-const lang = (navigator.language || 'en').slice(0, 2);
-const dict = dictionaries[lang] ?? en;
+export type Lang = 'en' | 'it';
+const KEY = 'pourgate.lang';
+const read = (): Lang => {
+  try {
+    const saved = localStorage.getItem(KEY);
+    if (saved === 'en' || saved === 'it') return saved;
+  } catch {
+    // storage blocked: fall back to the browser language
+  }
+  return (navigator.language || 'en').slice(0, 2) === 'it' ? 'it' : 'en';
+};
 
-/** Translate a key using the browser language, falling back to English. */
-export const t = (key: Key): string => dict[key] ?? en[key];
-// Kept as a hook so a runtime language switcher can be added without touching call sites.
+let lang: Lang = read();
+const listeners = new Set<() => void>();
+
+export const getLang = (): Lang => lang;
+export function setLang(next: Lang): void {
+  lang = next;
+  try {
+    localStorage.setItem(KEY, next);
+  } catch {
+    // not persisted, still applied
+  }
+  document.documentElement.lang = next;
+  listeners.forEach((fn) => fn());
+}
+
+/** Translate a key in the current language, falling back to English. */
+export const t = (key: Key): string => dictionaries[lang]?.[key] ?? en[key];
 export const useT = () => {
-  useSyncExternalStore(() => () => {}, () => dict);
+  useSyncExternalStore(
+    (fn) => (listeners.add(fn), () => listeners.delete(fn)),
+    () => lang,
+  );
   return t;
 };

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Preferences } from './components/Preferences';
 import { Button } from './components/ui/button';
 import { api } from './lib/api';
 import { useT } from './lib/i18n';
@@ -6,16 +7,17 @@ import { cn } from './lib/utils';
 import { Analytics } from './pages/Analytics';
 import { Audit } from './pages/Audit';
 import { Login } from './pages/Login';
+import { Overview } from './pages/Overview';
 import { Playground } from './pages/Playground';
 import { Providers } from './pages/Providers';
 import { Tokens } from './pages/Tokens';
 
-type Tab = 'tokens' | 'providers' | 'analytics' | 'playground' | 'audit';
+type Tab = 'overview' | 'tokens' | 'providers' | 'analytics' | 'playground' | 'audit';
 
 export function App() {
   const t = useT();
   const [auth, setAuth] = useState<'loading' | 'in' | 'out'>('loading');
-  const [tab, setTab] = useState<Tab>('tokens');
+  const [tab, setTab] = useState<Tab>('overview');
 
   useEffect(() => {
     api
@@ -35,7 +37,7 @@ export function App() {
           {t('appName')}
         </h1>
         <nav className="flex gap-1 rounded-xl border border-border bg-white/70 p-1 dark:bg-neutral-900/60" aria-label="Main">
-          {(['tokens', 'providers', 'playground', 'analytics', 'audit'] as const).map((k) => (
+          {(['overview', 'tokens', 'providers', 'playground', 'analytics', 'audit'] as const).map((k) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -49,13 +51,14 @@ export function App() {
             </button>
           ))}
         </nav>
-        <Button
-          variant="outline"
-          onClick={() => api.logout().finally(() => setAuth('out'))}
-        >
-          {t('logout')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Preferences />
+          <Button variant="outline" onClick={() => api.logout().finally(() => setAuth('out'))}>
+            {t('logout')}
+          </Button>
+        </div>
       </header>
+      {tab === 'overview' && <Overview onUnauthorized={() => setAuth('out')} goTo={setTab} />}
       {tab === 'tokens' && <Tokens onUnauthorized={() => setAuth('out')} />}
       {tab === 'providers' && <Providers onUnauthorized={() => setAuth('out')} />}
       {tab === 'playground' && <Playground onUnauthorized={() => setAuth('out')} />}

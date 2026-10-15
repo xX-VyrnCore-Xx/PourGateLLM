@@ -402,6 +402,7 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
           keysFromEnv: opts.poolManager?.envKeys(p).length ?? null,
           keysCooling: pool?.coolingCount() ?? 0,
           trainsOnPrompts: p.trains_on_prompts ?? null,
+          signupUrl: p.signup_url ?? null,
           models: p.models.map((m) => ({
             id: m.id,
             circuit: opts.breaker?.state(`${p.provider}|${m.id}`) ?? 'closed',
