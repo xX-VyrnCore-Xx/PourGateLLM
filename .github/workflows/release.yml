@@ -2,6 +2,12 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Manual run: creates the vX.Y.Z tag and release itself (useful when tags cannot be pushed).
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, without the leading v (e.g. 0.1.0)'
+        required: true
 
 permissions:
   contents: write
@@ -10,7 +16,18 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
     steps:
+      - id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          VERSION="${INPUT_VERSION:-${GITHUB_REF_NAME#v}}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "Invalid version: $VERSION" >&2; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -24,7 +41,7 @@ jobs:
       - name: Bundle
         run: |
           set -e
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ steps.v.outputs.version }}"
           mkdir -p dist-release/pourgatellm
           cp -r packages/server/dist dist-release/pourgatellm/dist
           cp -r packages/client/dist dist-release/pourgatellm/public
@@ -52,8 +69,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ needs.verify.outputs.version }}
             type=raw,value=latest
       - uses: docker/build-push-action@v6
         with:
@@ -76,12 +92,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          TAG="v${{ needs.verify.outputs.version }}"
           # The release may already exist (created from the GitHub UI): then just attach the bundle.
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" pourgatellm-*.tar.gz --clobber
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" pourgatellm-*.tar.gz --clobber
           else
-            gh release create "$GITHUB_REF_NAME" pourgatellm-*.tar.gz \
-              --title "PourGateLLM $GITHUB_REF_NAME" \
+            # --target only matters when the tag does not exist yet (manual run): it is created at this commit.
+            gh release create "$TAG" pourgatellm-*.tar.gz \
+              --title "PourGateLLM $TAG" \
               --generate-notes \
-              --verify-tag
+              --target "$GITHUB_SHA"
           fi

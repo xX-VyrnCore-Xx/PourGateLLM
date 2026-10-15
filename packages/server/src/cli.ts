@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openDatabase } from './db.js';
+import { backup, check, maintain, stats } from './dbtools.js';
 import { loadRegistry } from './registry.js';
 import { buildBundle, generateSigningKeys, signBundle } from './registry-sync.js';
 import { TokenStore } from './tokens.js';
@@ -16,7 +17,9 @@ function usage(): never {
   cli tokens list
   cli tokens revoke <id>
   cli registry bundle [--dir registry] --out <file> [--version <n>] [--sign <private.pem>]
-  cli registry keygen --out-dir <dir>`);
+  cli registry keygen --out-dir <dir>
+  cli db stats | check | optimize
+  cli db backup --out <file>`);
   process.exit(2);
 }
 
@@ -30,7 +33,37 @@ const positiveInt = (v: string | undefined, flag: string): number | undefined =>
   return n;
 };
 
-if (group === 'registry') {
+const dbPath = () => resolve(process.env.POURGATE_DB ?? 'data/pourgate.db');
+
+if (group === 'db') {
+  const db = openDatabase(dbPath());
+  if (action === 'stats') {
+    const s = stats(db, dbPath());
+    const kb = (n: number | null) => (n === null ? '-' : `${(n / 1024).toFixed(1)} KiB`);
+    console.log(`schema v${s.schemaVersion}, file ${kb(s.fileBytes)}, wal ${kb(s.walBytes)}`);
+    for (const [t, n] of Object.entries(s.tables)) console.log(`${t.padEnd(16)} ${n}`);
+  } else if (action === 'check') {
+    const r = check(db);
+    console.log(r.ok ? 'ok' : `PROBLEMS FOUND: ${r.integrity.join('; ')} (foreign key violations: ${r.foreignKeyViolations})`);
+    process.exitCode = r.ok ? 0 : 1;
+  } else if (action === 'optimize') {
+    maintain(db);
+    console.log('Optimized and checkpointed.');
+  } else if (action === 'backup') {
+    const { values } = parseArgs({ args: rest, options: { out: { type: 'string' } } });
+    if (!values.out) usage();
+    try {
+      backup(db, resolve(values.out));
+      console.log(`Wrote ${values.out} (owner-only; it contains encrypted provider keys and token hashes, and needs the master key to be useful)`);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exitCode = 1;
+    }
+  } else {
+    usage();
+  }
+  db.close();
+} else if (group === 'registry') {
   if (action === 'bundle') {
     const { values } = parseArgs({
       args: rest,
