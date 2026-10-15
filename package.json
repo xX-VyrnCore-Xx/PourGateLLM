@@ -30,7 +30,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "start": "node --no-warnings packages/server/dist/index.js",
-    "cli": "tsx packages/server/src/cli.ts"
+    "cli": "tsx packages/server/src/cli.ts",
+    "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

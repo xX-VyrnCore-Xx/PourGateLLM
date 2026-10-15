@@ -46,7 +46,7 @@ jobs:
           cp -r packages/server/dist dist-release/pourgatellm/dist
           cp -r packages/client/dist dist-release/pourgatellm/public
           cp -r registry evals examples docs dist-release/pourgatellm/
-          cp -r bin dist-release/pourgatellm/bin
+          cp -r bin install dist-release/pourgatellm/
           cp README.md LICENSE .env.example dist-release/pourgatellm/
           echo "${VERSION}" > dist-release/pourgatellm/VERSION
           tar -czf "pourgatellm-${VERSION}.tar.gz" -C dist-release pourgatellm

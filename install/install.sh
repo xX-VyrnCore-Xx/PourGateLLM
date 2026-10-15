@@ -31,6 +31,7 @@ curl -fsSL "https://github.com/$REPO/releases/download/v$VERSION/pourgatellm-$VE
   || die "download failed (does release v$VERSION have a tarball?)"
 
 # Replace the application; data and config in $HOME_DIR/data and config.env are kept.
+if [ -f "$HOME_DIR/app/VERSION" ]; then echo "Updating from $(cat "$HOME_DIR/app/VERSION")..."; fi
 mkdir -p "$HOME_DIR" "$BIN_DIR"
 rm -rf "$HOME_DIR/app"
 mkdir -p "$HOME_DIR/app"
@@ -43,6 +44,12 @@ POURGATE_HOME="\${POURGATE_HOME:-$HOME_DIR}" exec node "$HOME_DIR/app/bin/pourga
 SHIM
 chmod +x "$BIN_DIR/pourgate"
 
+# Remember what was installed where, so that "pourgate uninstall" removes exactly that.
+cat > "$HOME_DIR/install.json" <<REC
+{"version": "$VERSION", "home": "$HOME_DIR", "bin": "$BIN_DIR/pourgate"}
+REC
+
 echo "Installed PourGateLLM $VERSION to $HOME_DIR"
 case ":$PATH:" in *":$BIN_DIR:"*) ;; *) echo "Add $BIN_DIR to your PATH:  export PATH=\"$BIN_DIR:\$PATH\"" ;; esac
+echo "Remove it later with:  pourgate uninstall   (add --purge to delete your data too)"
 echo "Start it with:  pourgate start   (first run prints your dashboard password and API token)"

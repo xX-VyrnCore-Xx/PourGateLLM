@@ -27,6 +27,7 @@ try {
 
   # Replace the application; data and config.env in $Root are kept.
   $App = Join-Path $Root 'app'
+  if (Test-Path (Join-Path $App 'VERSION')) { Write-Host "Updating from $((Get-Content (Join-Path $App 'VERSION') -Raw).Trim())..." }
   if (Test-Path $App) { Remove-Item $App -Recurse -Force }
   New-Item -ItemType Directory -Path $App, $BinDir -Force | Out-Null
   tar -xzf $Archive -C $App --strip-components=1
@@ -38,10 +39,14 @@ try {
 $Shim = "@echo off`r`nset ""POURGATE_HOME=$Root""`r`nnode ""$App\bin\pourgate.mjs"" %*`r`n"
 Set-Content -Path (Join-Path $BinDir 'pourgate.cmd') -Value $Shim -Encoding ASCII
 
+# Remember what was installed where, so that "pourgate uninstall" removes exactly that.
+Set-Content -Path (Join-Path $Root 'install.json') -Value ('{"version": "' + $Version + '", "home": "' + ($Root -replace '\\','\\\\') + '"}') -Encoding ASCII
+
 $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 if (($UserPath -split ';') -notcontains $BinDir) {
   [Environment]::SetEnvironmentVariable('Path', "$UserPath;$BinDir", 'User')
   Write-Host "Added $BinDir to your PATH (open a new terminal)."
 }
 Write-Host "Installed PourGateLLM $Version to $Root"
+Write-Host "Remove it later with:  pourgate uninstall   (add -Purge to delete your data too)"
 Write-Host "Start it with:  pourgate start   (first run prints your dashboard password and API token)"

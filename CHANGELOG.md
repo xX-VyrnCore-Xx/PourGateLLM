@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `pourgate doctor [--live] [--url]`: read-only diagnosis of an installation; `pnpm smoke`: end-to-end self-test with a fake provider (also in CI); `docs/TESTING.md`.
+- Uninstallers: `pourgate uninstall [--purge] [--yes]` (`install/uninstall.sh`, `install/uninstall.ps1`) and `install/uninstall-docker.sh`; installers record what they installed (`install.json`) and report updates.
 - Cache: coalescing of identical in-flight requests, stale-if-error (`POURGATE_CACHE_STALE_SECONDS`), byte cap (`POURGATE_CACHE_MAX_MB`), per-model clear, served-result counters.
 
 - Provider keys: pause/resume and traffic weights (×1–×10) from the dashboard and `PATCH /admin/api/provider-keys/:id`.

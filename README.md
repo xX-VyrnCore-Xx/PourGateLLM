@@ -95,6 +95,20 @@ Pick one. Each prints your dashboard password and API token on first run.
 | 🪟 **CLI**, Windows (Node ≥ 22.13) | `irm https://raw.githubusercontent.com/xX-VyrnCore-Xx/PourGateLLM/main/install/install.ps1 \| iex` |
 | 🪟 **Windows app** (experimental) | `.msi` / `.exe` attached to the [latest release](https://github.com/xX-VyrnCore-Xx/PourGateLLM/releases/latest), when present |
 
+### Uninstall
+
+| Installed with | Remove with |
+|---|---|
+| CLI | `pourgate uninstall` keeps your data and config; `pourgate uninstall --purge` deletes everything. Windows: `pourgate uninstall` too (it runs `uninstall.ps1`, `-Purge` is added for you with `--purge`). |
+| Docker | `sh uninstall-docker.sh` stops and removes the container, keeping the data volume and `.env`. Add `--purge` to delete the volume and folder, `--image` to drop the image. ([script](install/uninstall-docker.sh)) |
+| Windows app | *Settings → Apps → PourGateLLM → Uninstall*. Its data is in `%APPDATA%\dev.pourgatellm.desktop`; delete that folder to remove it too. |
+
+Uninstallers show what they will delete, ask for confirmation (`--yes` skips it) and refuse to run while the server is up. Nothing is deleted outside the folders listed in the prompt.
+
+### Testing
+
+`pnpm build && pnpm smoke` runs an end-to-end self-test with a fake provider (no keys needed), and `pourgate doctor [--live]` checks an installation. See [docs/TESTING.md](docs/TESTING.md) for the full guide.
+
 ### CLI
 
 After installing, `pourgate start` runs the gateway. Config lives in `~/.pourgate/config.env` (`pourgate env` prints the path): add your provider keys there and restart.
