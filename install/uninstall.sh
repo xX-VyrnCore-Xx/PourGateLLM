@@ -35,7 +35,7 @@ main() {
     [ -n "$p" ] && PORT_NUM="$p"
   fi
   if command -v curl >/dev/null 2>&1 && curl -fsS -m 2 -o /dev/null "http://127.0.0.1:$PORT_NUM/health" 2>/dev/null; then
-    echo "A PourGateLLM server is still running on port $PORT_NUM. Stop it first (Ctrl+C in its terminal), then run this again." >&2
+    echo "A PourGateLLM server is still running on port $PORT_NUM. Stop it first (Ctrl+C in its terminal, or \"pourgate service uninstall\" if it runs as a service), then run this again." >&2
     return 1
   fi
 
@@ -59,6 +59,20 @@ main() {
     case "$answer" in y|Y|yes|YES) ;; *) echo "Cancelled."; return 1 ;; esac
   fi
 
+  # Stop and remove the auto-start service, if one was installed.
+  UNIT="$HOME/.config/systemd/user/pourgatellm.service"
+  if [ -f "$UNIT" ]; then
+    command -v systemctl >/dev/null 2>&1 && systemctl --user disable --now pourgatellm >/dev/null 2>&1
+    rm -f "$UNIT"
+    command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload >/dev/null 2>&1
+    echo "Removed the pourgatellm systemd service."
+  fi
+  PLIST="$HOME/Library/LaunchAgents/dev.pourgatellm.gateway.plist"
+  if [ -f "$PLIST" ]; then
+    command -v launchctl >/dev/null 2>&1 && launchctl unload -w "$PLIST" >/dev/null 2>&1
+    rm -f "$PLIST"
+    echo "Removed the launchd service."
+  fi
   rm -f "$BIN"
   # Only delete the program directory if it really is one.
   if [ -f "$HOME_DIR/app/bin/pourgate.mjs" ]; then rm -rf "$HOME_DIR/app"; fi

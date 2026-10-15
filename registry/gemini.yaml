@@ -2,6 +2,7 @@
 provider: gemini
 base_url: https://generativelanguage.googleapis.com/v1beta/openai
 api_key_env: GEMINI_API_KEYS
+signup_url: https://aistudio.google.com/apikey
 models:
   - id: gemini-2.5-flash
     tier: large
