@@ -42,6 +42,8 @@ export const providerSchema = z
       .regex(/^[a-z0-9][a-z0-9-]*$/)
       .optional(),
     trains_on_prompts: z.boolean().optional(),
+    /** The provider answers without an API key (anonymous, rate-limited per IP): no key is needed to enable it. */
+    keyless: z.boolean().optional(),
     /** Where to get an API key (shown by the setup wizard and the dashboard; plain text hint only). */
     signup_url: z
       .string()

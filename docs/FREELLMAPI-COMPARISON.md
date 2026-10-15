@@ -30,6 +30,6 @@ Open, signed, self-updating registry (no paid catalog); per-client tokens with q
 | Dashboard form to add a custom OpenAI-compatible endpoint | **done** (model auto-detection, stored in the database) |
 | Bulk key import | **done** (paste many keys; no export, no periodic health check — the per-key test button exists) |
 | Native Gemini and Ollama API surfaces, MCP server | not implemented |
-| Keyless providers (Kilo anonymous, OVH, AI Horde) | not supported: every provider needs a key |
+| Keyless providers (Kilo anonymous, OVH, AI Horde) | **done** for Kilo and OVH (real request verified); AI Horde needs its own queue adapter, not implemented |
 | Prompt compression pipeline | not implemented |
 | macOS / mobile apps | Windows app only |

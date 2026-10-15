@@ -271,6 +271,10 @@ export OPENAI_BASE_URL=http://localhost:3000/v1 OPENAI_API_KEY=<your token>
 codex --model auto          # Codex CLI through the gateway
 ```
 
+## 🆓 Providers that need no key
+
+Providers marked `keyless: true` in the registry work out of the box: **Kilo** (anonymous free routes, prompts may be logged for training: the privacy policy `no-training` excludes it) and **OVHcloud AI Endpoints** (anonymous tier, about 2 requests/minute per IP, unmeasured). The gateway sends no `Authorization` header to them. Adding a real key later replaces the anonymous slot and usually lifts the limits. Verified on 2026-10-15 with a real request through the gateway to each of them.
+
 ## 🔌 Your own endpoints and many keys
 
 - **Providers → Your own endpoints**: add any OpenAI-compatible server (Ollama, llama.cpp, LM Studio, vLLM, another gateway) by name and base URL. Leave the model list empty and the gateway asks the server (`GET /models`) which models it has. Then add a key under the new provider; servers that need none accept any placeholder of 8+ characters. The endpoint takes part in routing, failover, limits and the audit log like any other provider, and survives restarts (stored in the database). Name collisions with shipped providers are refused; removing an endpoint deletes its stored keys.
