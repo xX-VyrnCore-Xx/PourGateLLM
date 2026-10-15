@@ -271,6 +271,25 @@ export OPENAI_BASE_URL=http://localhost:3000/v1 OPENAI_API_KEY=<your token>
 codex --model auto          # Codex CLI through the gateway
 ```
 
+## 🗜️ Prompt compression (opt-in)
+
+`POURGATE_COMPRESSION=light` trims what a model never needs verbatim, so each request uses fewer free tokens: blank-line runs and trailing spaces outside code blocks, JSON-only messages (minified), exact duplicate consecutive messages and very long tool outputs (head and tail kept, `[… N characters omitted …]` in the middle). `aggressive` also replaces the oldest turns with a one-line marker once the history exceeds ~24,000 characters, always keeping system prompts and the latest 6 messages (and never separating a tool result from its call). The last user message, system prompts, tool-call structure and fenced code are never touched, and any error falls back to the original. Responses carry `x-pourgate-compressed: <characters saved>`. Compression happens before the cache, so compressed and original prompts share cache entries. Off by default because dropping history can change answers.
+
+## 🧭 Gemini and Ollama native APIs
+
+- **Gemini** (always on): `POST /v1beta/models/{model}:generateContent`, `:streamGenerateContent?alt=sse`, `:countTokens`, `GET /v1beta/models`. Point Gemini CLI or a Google SDK at the gateway (`GOOGLE_GEMINI_BASE_URL=http://localhost:3000`) and use a client token as the API key (`x-goog-api-key`, `?key=` or `Authorization: Bearer`). Text, images, function calling, JSON mode and streaming work; a Gemini model name the registry does not know (`gemini-2.5-pro` / `flash` / `flash-lite`) maps to `auto:large` / `auto:medium` / `auto:small`. `countTokens` is an estimate (about 4 characters per token). Not supported: `embedContent`, file uploads, caching, safety settings.
+- **Ollama** (opt-in, `POURGATE_OLLAMA_API=true`): `POST /api/chat`, `/api/generate` (NDJSON streaming by default, as Ollama does), `GET /api/tags`, `/api/version`, `POST /api/show`. For Zed, JetBrains AI, Open WebUI and other local-model clients: set the host to `http://localhost:3000` and the token as API key (`Authorization: Bearer`). Clients that cannot send a token will not work, because the gateway never serves unauthenticated requests. Not supported: pull/push/create, embeddings.
+
+## 🛠️ MCP server
+
+The gateway is also an [MCP](https://modelcontextprotocol.io) server (Streamable HTTP, stateless) at `POST /mcp` (alias `/v1/mcp`), authenticated with a normal client token. Tools: `chat` (ask a free model; `auto`, `fusion`, `auto:<profile>` or an exact id), `list_models`, `provider_status`. Calls run through the regular pipeline with the caller's token, so quotas, failover and the audit log apply.
+
+```bash
+claude mcp add --transport http pourgate http://localhost:3000/mcp --header "Authorization: Bearer <your token>"
+```
+
+Other MCP clients: URL `http://localhost:3000/mcp`, header `Authorization: Bearer <token>`. Not supported: server-sent streams (GET returns 405), resources and prompts.
+
 ## 🆓 Providers that need no key
 
 Providers marked `keyless: true` in the registry work out of the box: **Kilo** (anonymous free routes, prompts may be logged for training: the privacy policy `no-training` excludes it) and **OVHcloud AI Endpoints** (anonymous tier, about 2 requests/minute per IP, unmeasured). The gateway sends no `Authorization` header to them. Adding a real key later replaces the anonymous slot and usually lifts the limits. Verified on 2026-10-15 with a real request through the gateway to each of them.
@@ -282,7 +301,7 @@ Providers marked `keyless: true` in the registry work out of the box: **Kilo** (
 
 ## 🔗 Profiles and sticky sessions
 
-**Profiles** are named fallback chains you control. Put them in `profiles.yaml` (see [examples/profiles.yaml](examples/profiles.yaml); path from `POURGATE_PROFILES_FILE`) and request one as `"model": "auto:coding"`. The gateway tries the chain in your order, skipping models that cannot serve the request (missing tools/vision, prompt longer than the context window) and failing over on rate limits and errors. Profiles appear in `/v1/models`.
+**Profiles** are named fallback chains you control. Put them in `profiles.yaml` (see [examples/profiles.yaml](examples/profiles.yaml); path from `POURGATE_PROFILES_FILE`) and request one as `"model": "auto:coding"`. The gateway tries the chain in your order, skipping models that cannot serve the request (missing tools/vision, prompt longer than the context window) and failing over on rate limits and errors. Profiles appear in `/v1/models`. They can also be created, edited and deleted from the dashboard (**Providers → Fallback profiles**, one model per line, `model @provider` to pin a provider); changes apply immediately and are written back to the file (comments in a hand-edited file are not preserved).
 
 **Sticky sessions**: send `x-pourgate-session: <any id>` and follow-up turns of that conversation go back to the model that answered last (for `auto`, `auto:<tier>` and profiles) for 30 minutes, as long as it is still available. This keeps tone and tool-call behaviour consistent across a long chat. Sessions are scoped to the calling token, so ids never leak between clients.
 
@@ -408,6 +427,8 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_DB` | `data/pourgate.db` | SQLite database path. |
 | `PORT` | `3000` | HTTP port. |
 | `POURGATE_ROUTING_STRATEGY` | `spread` | How models are ordered inside a tier: `spread` (least used first), `balanced`, `quality` or `speed` (use measured scores). |
+| `POURGATE_COMPRESSION` | `off` | `light` or `aggressive` prompt compression. |
+| `POURGATE_OLLAMA_API` | off | Serve the Ollama-compatible API under `/api`. |
 | `POURGATE_FUSION_PANEL` | `3` | Models asked by the `fusion` virtual model (2-5). |
 | `POURGATE_PROFILES_FILE` | `profiles.yaml` | Named fallback chains (`auto:<name>`). |
 | `POURGATE_EVAL_HOURS` | `0` (off) | Run the evals automatically every N hours (they consume free-tier quota). |

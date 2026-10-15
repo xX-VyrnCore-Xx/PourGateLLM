@@ -8,6 +8,10 @@
 - Dependencies: zod 4, @hono/node-server 2, react 19, vite 8, @vitejs/plugin-react 6, tailwind-merge 3, vitest 5 and tsup 9 (all tests, build and the browser smoke test pass). TypeScript 7 and @types/node 26 are deliberately left out (Node 22 is the supported runtime).
 - Routing: within a tier, models are now ordered by quality score, then response speed (smoothed time-to-first-byte in coarse buckets, forgotten after 5 minutes, failures count as slow), then least used. The Providers page shows each model's latency and always links to the provider's key page.
 - CI: `pnpm audit --prod --audit-level=high` on every run.
+- Dashboard: fallback profiles can be created, edited and deleted from Providers → Fallback profiles (hot-applied, saved to `profiles.yaml`).
+- Compression: opt-in prompt compression (`POURGATE_COMPRESSION=light|aggressive`), fail-open, never touches the last user message, system prompts, tool calls or code blocks.
+- API: Gemini native API (`/v1beta/models/{m}:generateContent` / `streamGenerateContent` / `countTokens`, key via `x-goog-api-key`, `?key=` or Bearer) and an opt-in Ollama API (`POURGATE_OLLAMA_API=true`: `/api/chat`, `/api/generate`, `/api/tags`, `/api/show`).
+- MCP: the gateway is an MCP server at `/mcp` (tools: chat, list_models, provider_status), stateless Streamable HTTP, same token auth.
 - Providers without keys: registry `keyless: true` (Kilo anonymous, OVHcloud anonymous tier) enables a provider with no key and sends no Authorization header; `registry discover` now also covers OVH.
 - Dashboard: add your own OpenAI-compatible endpoints (models auto-detected, stored in the database, hot-reloaded) and paste many keys at once.
 - API: `fusion` virtual model: a panel of different models answers in parallel and a judge merges the drafts (`POURGATE_FUSION_PANEL`).

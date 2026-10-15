@@ -7,6 +7,7 @@ import type { AuditLog } from './audit.js';
 import type { Breaker } from './breaker.js';
 import type { LatencyTracker } from './latency.js';
 import { KeyStoreError, MAX_KEYS_PER_PROVIDER, type KeyStore } from './keys.js';
+import type { Profiles } from './profiles.js';
 import { CustomProviderError, detectModels, envNameFor, type CustomProviders } from './customproviders.js';
 import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
@@ -35,6 +36,9 @@ export interface AdminOptions {
   /** Dashboard-defined OpenAI-compatible endpoints; `onCustomChange` re-applies them to the registry. */
   customProviders?: CustomProviders;
   onCustomChange?: () => void;
+  /** Named fallback chains editable from the dashboard; `onProfilesChange` persists them. */
+  profiles?: Profiles;
+  onProfilesChange?: () => void;
   /** Provider names that come from the shipped registry or override files and cannot be reused. */
   reservedNames?: () => Set<string>;
   requestLog?: RequestLog;
@@ -344,6 +348,39 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     }
   });
 
+
+  // Fallback profiles (auto:<name>): list, create/replace, delete. Persisted by `onProfilesChange`.
+  app.get('/profiles', (c) =>
+    c.json((opts.profiles?.names() ?? []).map((name) => ({ name, chain: opts.profiles!.chain(name)!, resolved: opts.profiles!.resolve(opts.registry(), name).length }))),
+  );
+  app.put('/profiles/:name', async (c) => {
+    if (!opts.profiles) return c.json({ error: 'profiles are not configured' }, 404);
+    const name = c.req.param('name');
+    const b = (await c.req.json().catch(() => null)) as { chain?: unknown } | null;
+    if (!Array.isArray(b?.chain)) return c.json({ error: "'chain' must be a list of models" }, 400);
+    const chain = (b!.chain as unknown[]).map((i) => (typeof i === 'string' ? { model: i.trim() } : i && typeof i === 'object' ? { model: String((i as { model?: unknown }).model ?? '').trim(), provider: (i as { provider?: unknown }).provider ? String((i as { provider?: unknown }).provider).trim() : undefined } : { model: '' }));
+    if (chain.some((i) => !i.model)) return c.json({ error: 'every entry needs a model id' }, 400);
+    const registry = opts.registry();
+    const unknown = chain.find((i) => !registry.some((p) => (!i.provider || p.provider === i.provider) && p.models.some((m) => m.id === i.model && m.capabilities.includes('chat'))));
+    if (unknown) return c.json({ error: `no chat model "${unknown.model}"${unknown.provider ? ` on ${unknown.provider}` : ''} in the registry` }, 400);
+    const existed = opts.profiles.chain(name) !== undefined;
+    try {
+      opts.profiles.set(name, chain);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : 'invalid profile' }, 400);
+    }
+    opts.onProfilesChange?.();
+    opts.audit?.record('profile_save', { ip: clientIp(c), target: name, detail: `${chain.length} models` });
+    return c.json({ name, chain: opts.profiles.chain(name) }, existed ? 200 : 201);
+  });
+  app.delete('/profiles/:name', (c) => {
+    if (!opts.profiles) return c.json({ error: 'profiles are not configured' }, 404);
+    const name = c.req.param('name');
+    if (!opts.profiles.delete(name)) return c.json({ error: 'not found' }, 404);
+    opts.onProfilesChange?.();
+    opts.audit?.record('profile_delete', { ip: clientIp(c), target: name });
+    return c.body(null, 204);
+  });
 
   // Paste many keys at once (one per line, or separated by commas/spaces). Each is checked and stored like a single key.
   app.post('/providers/:name/keys/bulk', async (c) => {

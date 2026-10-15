@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { parse } from 'yaml';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { parse, stringify } from 'yaml';
 import { z } from 'zod';
 import type { ProviderEntry } from '@pourgate/shared';
 import type { Candidate } from './router.js';
@@ -33,6 +34,37 @@ export class Profiles {
 
   names(): string[] {
     return [...this.chains.keys()].sort();
+  }
+
+  chain(name: string): ChainItem[] | undefined {
+    return this.chains.get(name);
+  }
+
+  /** Creates or replaces a profile. Throws on an invalid name or chain. */
+  set(name: string, chain: ChainItem[]): void {
+    if (!NAME.test(name) || RESERVED.has(name)) throw new Error(`invalid profile name "${name}" (lowercase letters, digits, - and _; not small/medium/large)`);
+    if (chain.length === 0 || chain.length > 50) throw new Error('a profile needs 1 to 50 models');
+    if (!this.chains.has(name) && this.chains.size >= 50) throw new Error('at most 50 profiles');
+    this.chains.set(name, chain.map((c) => (c.provider ? { provider: c.provider, model: c.model } : { model: c.model })));
+  }
+
+  delete(name: string): boolean {
+    return this.chains.delete(name);
+  }
+
+  /** YAML in the same shape `parseProfiles` reads. */
+  toYaml(): string {
+    const obj: Record<string, unknown[]> = {};
+    for (const n of this.names()) obj[n] = this.chains.get(n)!.map((c) => (c.provider ? { provider: c.provider, model: c.model } : c.model));
+    return `# Written by the dashboard (Providers > Fallback profiles). You can edit it by hand, but comments are not kept when the dashboard saves.\n${stringify(obj, { lineWidth: 0 })}`;
+  }
+
+  /** Writes the profiles file atomically. */
+  save(file: string): void {
+    mkdirSync(dirname(file), { recursive: true });
+    const tmp = `${file}.tmp`;
+    writeFileSync(tmp, this.toYaml());
+    renameSync(tmp, file);
   }
 
   /** Profile name when `requested` is `auto:<name>` or `profile:<name>` for a defined profile. */

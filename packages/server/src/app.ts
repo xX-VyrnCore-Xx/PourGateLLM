@@ -2,6 +2,9 @@ import type { AuditLog } from './audit.js';
 import { Breaker } from './breaker.js';
 import { LatencyTracker } from './latency.js';
 import type { CustomProviders } from './customproviders.js';
+import { compressPayload, type CompressionOptions } from './compress.js';
+import { handleBody, type McpBackend } from './mcp.js';
+import { NativeBadRequest, estimateTokens, geminiError, geminiModelEntry, geminiToChat, mapGeminiModel, ollamaChatToChat, ollamaTag, wrapGemini, wrapGeminiError, wrapOllama } from './native-apis.js';
 import { Profiles, StickyStore } from './profiles.js';
 import { BadRequest, completionsToChat, openaiError, responsesToChat, wrapCompletions, wrapResponses } from './openai-extra.js';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -77,6 +80,12 @@ export interface AppOptions {
   customProviders?: CustomProviders;
   onCustomChange?: () => void;
   reservedNames?: () => Set<string>;
+  /** Persists profile changes made from the dashboard. */
+  onProfilesChange?: () => void;
+  /** Optional prompt compression (off by default). */
+  compression?: CompressionOptions;
+  /** Serve the Ollama-compatible API (`/api/chat`, `/api/generate`, `/api/tags`) for Zed, JetBrains, Open WebUI... */
+  ollama?: boolean;
   /** Models asked by the `fusion` virtual model (default 3). */
   fusionPanel?: number;
   /** Named fallback chains, requested as `auto:<name>`. */
@@ -207,20 +216,25 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       : errorResponse(413, 'Request body is too large', 'invalid_request_error', 'request_too_large');
   const jsonLimit = bodyLimit({ maxSize: opts.maxBodyBytes ?? 20 * 1024 * 1024, onError: tooLarge });
   const uploadLimit = bodyLimit({ maxSize: maxUploadBytes + 1024 * 1024, onError: tooLarge });
-  app.use('/v1/*', (c, next) => (c.req.path === '/v1/audio/transcriptions' ? uploadLimit(c, next) : jsonLimit(c, next)));
+  // Gemini (/v1beta) and the optional Ollama API (/api) are gateway surfaces too: same limits, same authentication.
+  const gatewayPatterns = ['/v1/*', '/v1beta/*', ...(opts.ollama ? ['/api/*'] : [])];
+  for (const pattern of gatewayPatterns) app.use(pattern, (c, next) => (c.req.path === '/v1/audio/transcriptions' ? uploadLimit(c, next) : jsonLimit(c, next)));
   app.use(
     '/admin/api/*',
     bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: 'request body is too large' }, 413) }),
   );
 
-  app.use('/v1/*', async (c, next) => {
+  const gatewayAuth = async (c: Context<{ Variables: { principal: Principal } }>, next: () => Promise<void>) => {
     const header = c.req.header('authorization') ?? '';
-    // OpenAI clients send `Authorization: Bearer`; Anthropic SDKs send `x-api-key`.
-    const token = header.startsWith('Bearer ') ? header.slice(7) : (c.req.header('x-api-key') ?? '');
+    // OpenAI clients send `Authorization: Bearer`; Anthropic SDKs send `x-api-key`; Google SDKs `x-goog-api-key` (or ?key=).
+    const isGoogle = c.req.path.startsWith('/v1beta/');
+    const token = header.startsWith('Bearer ') ? header.slice(7) : (c.req.header('x-api-key') ?? c.req.header('x-goog-api-key') ?? (isGoogle ? (c.req.query('key') ?? '') : ''));
     const invalid = () =>
       c.req.path.startsWith('/v1/messages')
         ? anthropicError(401, 'Invalid or missing API key')
-        : errorResponse(401, 'Invalid or missing API token', 'invalid_request_error', 'invalid_api_key');
+        : isGoogle
+          ? geminiError(401, 'API key not valid')
+          : errorResponse(401, 'Invalid or missing API token', 'invalid_request_error', 'invalid_api_key');
     // Failed attempts per client address are capped, so tokens cannot be guessed at speed.
     const failed = () => {
       let ip = 'unknown';
@@ -242,7 +256,8 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       c.set('principal', { kind: 'client', record });
     }
     await next();
-  });
+  };
+  for (const pattern of gatewayPatterns) app.use(pattern, gatewayAuth);
 
   app.get('/v1/models', (c) => {
     const data = [
@@ -316,6 +331,14 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       return errorResponse(400, "'model' and a non-empty 'prompt' are required", 'invalid_request_error');
     }
 
+    // Opt-in prompt compression, before plugins, cache and routing see the request.
+    let compressedChars = 0;
+    if (endpoint === 'chat' && opts.compression && opts.compression.mode !== 'off') {
+      const r = compressPayload(payload, opts.compression);
+      payload = r.payload;
+      compressedChars = r.saved;
+    }
+
     const principal = c.get('principal');
     let clientId: number | undefined;
     if (principal.kind === 'client') {
@@ -357,6 +380,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     const spanId = newSpanId();
     const tag = (r: Response): Response => {
       if (tracer) r.headers.set('x-pourgate-trace-id', traceId);
+      if (compressedChars > 0) r.headers.set('x-pourgate-compressed', String(compressedChars));
       return r;
     };
     const route = ROUTES[endpoint];
@@ -596,6 +620,31 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   app.post('/v1/audio/speech', (c) => handle(c, 'speech'));
   app.post('/v1/images/generations', (c) => handle(c, 'images'));
 
+  // Model Context Protocol endpoint (Streamable HTTP, stateless). It lives under /v1 to share authentication,
+  // size limits and rate limits; /mcp is an alias for clients that expect that path.
+  app.post('/v1/mcp', async (c) => {
+    const auth = c.req.header('authorization') ?? (c.req.header('x-api-key') ? `Bearer ${c.req.header('x-api-key')}` : '');
+    const backend: McpBackend = {
+      version: process.env.POURGATE_VERSION ?? 'dev',
+      models: () => [...VIRTUAL_MODELS, 'fusion', ...(opts.profiles?.names().map((n) => `auto:${n}`) ?? []), ...new Set(getRegistry().flatMap((p) => p.models.filter((m) => m.capabilities.includes('chat')).map((m) => m.id)))],
+      providers: () => getRegistry().map((p) => ({ provider: p.provider, enabled: opts.pools.has(p.provider), models: p.models.length, keyless: p.keyless === true })),
+      chat: async (body) => {
+        const res = await app.fetch(new Request(new URL('/v1/chat/completions', c.req.url), { method: 'POST', headers: { 'content-type': 'application/json', authorization: auth }, body: JSON.stringify(body) }));
+        const json = (await res.json().catch(() => null)) as { choices?: { message?: { content?: unknown; reasoning?: unknown } }[]; error?: { message?: string } } | null;
+        if (!res.ok) return { ok: false, error: json?.error?.message ?? `request failed (${res.status})` };
+        const m = json?.choices?.[0]?.message;
+        const out = typeof m?.content === 'string' && m.content ? m.content : typeof m?.reasoning === 'string' ? m.reasoning : '';
+        return { ok: true, text: out, provider: res.headers.get('x-pourgate-provider'), model: res.headers.get('x-pourgate-model') };
+      },
+    };
+    const body = await c.req.json().catch(() => undefined);
+    if (body === undefined) return c.json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400);
+    const r = await handleBody(body, backend);
+    return r.json === undefined ? c.body(null, r.status as 202) : c.json(r.json as object, r.status as 200);
+  });
+  app.get('/v1/mcp', (c) => c.body(null, 405, { allow: 'POST' }));
+  app.all('/mcp', (c) => app.fetch(new Request(new URL('/v1/mcp', c.req.url), c.req.raw)));
+
   // Legacy completions (editor autocomplete) and the Responses API (Codex CLI) on top of chat completions.
   const translated = (convert: (b: Record<string, unknown>) => Record<string, unknown>, wrap: (r: Response, model: string) => Promise<Response>) =>
     async (c: Context<{ Variables: { principal: Principal } }>) => {
@@ -612,6 +661,55 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     };
   app.post('/v1/completions', translated(completionsToChat, wrapCompletions));
   app.post('/v1/responses', translated(responsesToChat, wrapResponses));
+
+  // Google Gemini native API (Gemini CLI, Google SDKs): translated to chat completions.
+  const isKnownModel = (id: string) => getRegistry().some((p) => p.models.some((m) => m.id === id));
+  app.get('/v1beta/models', (c) => c.json({ models: [...new Set(getRegistry().flatMap((p) => p.models.filter((m) => m.capabilities.includes('chat')).map((m) => m.id)))].concat(['auto', 'fusion']).map(geminiModelEntry) }));
+  app.get('/v1beta/models/:id', (c) => c.json(geminiModelEntry(c.req.param('id').replace(/^models\//, ''))));
+  app.post('/v1beta/models/:spec', async (c) => {
+    const spec = c.req.param('spec');
+    const at = spec.lastIndexOf(':');
+    const action = at < 0 ? '' : spec.slice(at + 1);
+    const model = mapGeminiModel(at < 0 ? spec : spec.slice(0, at), isKnownModel);
+    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return geminiError(400, 'Request body must be a JSON object');
+    if (action === 'countTokens') return c.json({ totalTokens: estimateTokens(body) });
+    if (action !== 'generateContent' && action !== 'streamGenerateContent') return geminiError(404, `Method ${action || '(none)'} is not supported`);
+    let chat: Record<string, unknown>;
+    try {
+      chat = geminiToChat(body, model, action === 'streamGenerateContent');
+    } catch (e) {
+      if (e instanceof NativeBadRequest) return geminiError(400, e.message);
+      throw e;
+    }
+    const res = await handle(c, 'chat', chat);
+    return res.ok ? wrapGemini(res, model, action === 'streamGenerateContent') : wrapGeminiError(res);
+  });
+
+  if (opts.ollama) {
+    // Ollama-compatible API (opt-in). NDJSON streaming, default stream=true as in Ollama.
+    const ollamaCall = (generate: boolean) => async (c: Context<{ Variables: { principal: Principal } }>) => {
+      const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ error: 'invalid request body' }, 400);
+      let chat: Record<string, unknown>;
+      try {
+        chat = ollamaChatToChat(body, generate);
+      } catch (e) {
+        if (e instanceof NativeBadRequest) return c.json({ error: e.message }, 400);
+        throw e;
+      }
+      return wrapOllama(await handle(c, 'chat', chat), String(body.model), generate, body.stream !== false);
+    };
+    app.post('/api/chat', ollamaCall(false));
+    app.post('/api/generate', ollamaCall(true));
+    app.get('/api/tags', (c) => c.json({ models: [...new Set(getRegistry().flatMap((p) => p.models.filter((m) => m.capabilities.includes('chat')).map((m) => m.id)))].concat(['auto', 'fusion']).map(ollamaTag) }));
+    app.get('/api/version', (c) => c.json({ version: '0.6.0' }));
+    app.post('/api/show', async (c) => {
+      const b = (await c.req.json().catch(() => null)) as { model?: string; name?: string } | null;
+      const id = b?.model ?? b?.name;
+      return id ? c.json({ modelfile: '', parameters: '', template: '', details: ollamaTag(id).details, model_info: {}, capabilities: ['completion', 'tools'] }) : c.json({ error: 'model is required' }, 400);
+    });
+  }
 
   // Anthropic Messages API on top of the same pipeline (requests are translated to chat completions and back).
   const parseAnthropic = async (c: Context<{ Variables: { principal: Principal } }>): Promise<Record<string, unknown> | Response> => {
@@ -646,6 +744,8 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         keyStore: opts.keyStore,
         poolManager: opts.poolManager,
         customProviders: opts.customProviders,
+        profiles: opts.profiles,
+        onProfilesChange: opts.onProfilesChange,
         onCustomChange: opts.onCustomChange,
         reservedNames: opts.reservedNames,
         requestLog: opts.requestLog,
