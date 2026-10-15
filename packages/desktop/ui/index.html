@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>PourGateLLM</title>
+    <style>
+      body { margin: 0; height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif;
+             background: linear-gradient(135deg, #6366f1, #a855f7); color: #fff; }
+      p { opacity: .85 }
+    </style>
+  </head>
+  <body>
+    <div style="text-align:center">
+      <h1>PourGateLLM</h1>
+      <p id="msg">Starting the gateway…</p>
+    </div>
+    <script>
+      const url = 'http://127.0.0.1:43117';
+      let tries = 0;
+      (function poll() {
+        // no-cors: we only need to know that the server accepts connections.
+        fetch(url + '/health', { mode: 'no-cors' })
+          .then(() => location.replace(url))
+          .catch(() => {
+            if (++tries > 60) document.getElementById('msg').textContent = 'The gateway did not start. Is Node 22.13+ installed?';
+            else setTimeout(poll, 500);
+          });
+      })();
+    </script>
+  </body>
+</html>

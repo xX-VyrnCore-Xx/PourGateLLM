@@ -1,0 +1,9 @@
+{
+  "name": "@pourgate/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Experimental Tauri desktop wrapper for PourGateLLM (not part of the default build).",
+  "scripts": {
+    "prepare:server": "node prepare.mjs"
+  }
+}
