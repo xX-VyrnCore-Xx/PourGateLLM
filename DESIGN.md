@@ -26,7 +26,7 @@
 | Catalogo aperto | Registry in YAML nel repo (`registry/`), sync da bundle, PR della community, CI di validazione |
 | Dati verificabili | **Probing** (implementato): il gateway legge gli header `x-ratelimit-*`, mette a riposo le chiavi con finestra esaurita e segnala il drift tra limiti dichiarati dal provider e registry |
 | Ranking basato su misure | **Eval periodiche** (pianificate): mini-benchmark per qualità, latenza, affidabilità per modello |
-| Multi-utente | Token per client con rate limit, quota giornaliera e scadenza; audit log (pianificato) |
+| Multi-utente | Token per client con rate limit, quota giornaliera e scadenza; audit log (implementato: login, token, chiavi, registry, cache, eval; mai segreti, conservato 180 giorni) |
 | Costo proporzionato alla richiesta | Routing per **complessità del prompt**: classificatore euristico a costo zero di quota (implementato) |
 | Privacy esplicita | **PII redaction** e policy per provider (pianificate), es. "questo provider addestra sui prompt" |
 

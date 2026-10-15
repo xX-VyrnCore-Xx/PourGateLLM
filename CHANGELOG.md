@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Admin audit log (API `GET /admin/api/audit` and dashboard tab).
+- Experimental Tauri desktop scaffold.
+
 ## 0.1.0
 
 First public release.

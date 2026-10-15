@@ -110,6 +110,15 @@ const MIGRATIONS: string[] = [
      vector BLOB NOT NULL
    );
    CREATE INDEX idx_semantic_lookup ON semantic_index(scope, context);`,
+  `CREATE TABLE audit_log (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     ts INTEGER NOT NULL,
+     action TEXT NOT NULL,
+     ip TEXT,
+     target TEXT,
+     detail TEXT
+   );
+   CREATE INDEX idx_audit_ts ON audit_log(ts);`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

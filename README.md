@@ -62,6 +62,7 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 | 🖥️ **Dashboard** | React + Tailwind UI in light and dark mode (English, Italian): manage tokens and provider keys, test keys, watch usage. |
 | 🗂️ **Open model registry** | YAML catalog with local overrides and optional signed, auto-syncing bundles. |
 | 🔐 **Encrypted provider keys** | AES-256-GCM in SQLite, bound to the provider; the UI only ever shows the last 4 characters. |
+| 🧾 **Admin audit log** | Logins (including failures), token and key changes, registry syncs and cache clears are recorded without secrets, kept 180 days and shown in the dashboard. |
 | 🐳 **Self-hosting ready** | Docker image and Compose file, one SQLite file, zero external services. |
 
 <details>
