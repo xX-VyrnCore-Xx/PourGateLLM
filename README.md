@@ -281,7 +281,10 @@ Off by default. Set `POURGATE_CACHE_TTL_SECONDS` to serve repeated identical req
 - **What is cached:** completed, non-streaming `200` JSON responses up to 256 KB. By default (`deterministic`) only requests with `temperature: 0` or a `seed`, because those are the ones where repeating the answer is expected. Use `POURGATE_CACHE_MODE=all` to cache any non-streaming request.
 - **Isolation:** entries are scoped per client token (and per privacy settings), so one client never receives another's response. The key is a hash of the whole request body, so prompts are not stored; **completions are**, in your SQLite database, until they expire.
 - **Control:** send `x-pourgate-cache: bypass` (or `Cache-Control: no-cache` / `no-store`) to skip the cache for a request. Hits carry `x-pourgate-cache: hit` and an `Age` header and are marked in analytics and in `pourgate_cache_requests_total`.
-- The dashboard's Analytics tab shows entries, hits and a **Clear cache** button.
+- **Coalescing:** identical cacheable requests that arrive while one is already being answered share that single provider call (`x-pourgate-cache: coalesced`), so a burst of the same prompt costs one request of quota.
+- **Stale-if-error:** set `POURGATE_CACHE_STALE_SECONDS` and an expired answer is kept for that long and served (`x-pourgate-cache: stale`, `Warning: 110`) only when every provider is failing, instead of returning an error.
+- **Size cap:** `POURGATE_CACHE_MAX_MB` bounds the stored bytes (oldest first), on top of `POURGATE_CACHE_MAX_ENTRIES`. `DELETE /admin/api/cache?model=<id>` clears the answers of one model only.
+- The dashboard's Analytics tab shows entries, hits, how requests were served (hit, semantic, stale, coalesced, miss) and a **Clear cache** button.
 
 ### Semantic cache (optional)
 
@@ -355,6 +358,8 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_REGISTRY_URL` | | Bundle URL to sync the registry from. |
 | `POURGATE_REGISTRY_PUBKEY` | | Ed25519 public key (PEM or file path). When set, bundles **must** be signed. |
 | `POURGATE_REGISTRY_SYNC_HOURS` | `12` | Sync interval. |
+| `POURGATE_CACHE_STALE_SECONDS` | `0` | Keep expired cache entries this long and serve them only when every provider fails. |
+| `POURGATE_CACHE_MAX_MB` | unlimited | Cap on stored cache bytes (oldest evicted first). |
 | `POURGATE_UPSTREAM_TIMEOUT_MS` | `60000` | How long to wait for a provider to start answering before failing over (streams may run longer once started). |
 | `POURGATE_BREAKER_THRESHOLD` | `5` | Consecutive failures (5xx, network, timeout) after which a model is skipped for a growing pause (30 s up to 5 min); it is still tried last if nothing else answers. |
 | `POURGATE_MAX_BODY_MB` | `20` | Largest accepted JSON request body (`413` above it). |

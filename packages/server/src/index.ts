@@ -66,6 +66,8 @@ if (cacheTtl > 0) {
       ttlMs: cacheTtl * 1000,
       maxEntries: Math.max(1, Number(process.env.POURGATE_CACHE_MAX_ENTRIES ?? 1000)),
       mode: parseCacheMode(process.env.POURGATE_CACHE_MODE),
+      staleMs: Math.max(0, Number(process.env.POURGATE_CACHE_STALE_SECONDS ?? 0)) * 1000,
+      maxBytes: process.env.POURGATE_CACHE_MAX_MB ? Math.max(1, Number(process.env.POURGATE_CACHE_MAX_MB)) * 1024 * 1024 : undefined,
     });
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);

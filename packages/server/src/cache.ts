@@ -3,11 +3,19 @@ import type { DatabaseSync } from 'node:sqlite';
 
 export type CacheMode = 'deterministic' | 'all';
 
+/** How a cacheable request was served. */
+export type CacheResult = 'hit' | 'semantic' | 'stale' | 'coalesced' | 'miss';
+export const CACHE_RESULTS: readonly CacheResult[] = ['hit', 'semantic', 'stale', 'coalesced', 'miss'];
+
 export interface CacheOptions {
   ttlMs: number;
   maxEntries: number;
   /** deterministic: only requests with temperature 0 or a seed · all: every non-streaming request. */
   mode: CacheMode;
+  /** After expiry an entry is kept this long and served only when every provider is failing (default 0 = off). */
+  staleMs?: number;
+  /** Upper bound for stored response bytes; the oldest entries go first (default unlimited). */
+  maxBytes?: number;
 }
 
 export interface CachedResponse {
@@ -23,6 +31,8 @@ export interface CacheStats {
   entries: number;
   hits: number;
   bytes: number;
+  /** Counters since the process started. */
+  served: Record<CacheResult, number>;
 }
 
 /** Largest response kept in the cache. */
@@ -61,6 +71,13 @@ export class ResponseCache {
     private readonly now: () => number = Date.now,
   ) {}
 
+  private readonly served: Record<CacheResult, number> = { hit: 0, semantic: 0, stale: 0, coalesced: 0, miss: 0 };
+
+  /** Counts how a request was served (for stats). */
+  note(result: CacheResult): void {
+    this.served[result]++;
+  }
+
   get mode(): CacheMode {
     return this.opts.mode;
   }
@@ -84,10 +101,23 @@ export class ResponseCache {
     if (!row) return undefined;
     const t = this.now();
     if (row.expires_at <= t) {
-      this.db.prepare('DELETE FROM response_cache WHERE key = ?').run(key);
+      // Past its life: gone, unless it is still inside the stale window (kept for getStale only).
+      if (row.expires_at + (this.opts.staleMs ?? 0) <= t) this.db.prepare('DELETE FROM response_cache WHERE key = ?').run(key);
       return undefined;
     }
     this.db.prepare('UPDATE response_cache SET hits = hits + 1 WHERE key = ?').run(key);
+    return { body: row.body, provider: row.provider, model: row.model, tier: row.tier, complexity: row.complexity, ageMs: t - row.created_at };
+  }
+
+  /** An expired entry still inside the stale window, for use when every provider is failing. */
+  getStale(key: string): CachedResponse | undefined {
+    const staleMs = this.opts.staleMs ?? 0;
+    if (staleMs <= 0) return undefined;
+    const row = this.db.prepare('SELECT * FROM response_cache WHERE key = ?').get(key) as
+      | { body: string; provider: string | null; model: string | null; tier: string | null; complexity: string | null; created_at: number; expires_at: number }
+      | undefined;
+    const t = this.now();
+    if (!row || row.expires_at + staleMs <= t) return undefined;
     return { body: row.body, provider: row.provider, model: row.model, tier: row.tier, complexity: row.complexity, ageMs: t - row.created_at };
   }
 
@@ -102,23 +132,38 @@ export class ResponseCache {
            provider = excluded.provider, model = excluded.model, tier = excluded.tier, complexity = excluded.complexity, size = excluded.size`,
       )
       .run(key, t, t + this.opts.ttlMs, entry.body, entry.provider, entry.model, entry.tier, entry.complexity, Buffer.byteLength(entry.body));
-    this.db.prepare('DELETE FROM response_cache WHERE expires_at <= ?').run(t);
+    this.db.prepare('DELETE FROM response_cache WHERE expires_at + ? <= ?').run(this.opts.staleMs ?? 0, t);
     const { n } = this.db.prepare('SELECT COUNT(*) AS n FROM response_cache').get() as { n: number };
     if (n > this.opts.maxEntries) {
       this.db
         .prepare('DELETE FROM response_cache WHERE key IN (SELECT key FROM response_cache ORDER BY created_at LIMIT ?)')
         .run(n - this.opts.maxEntries);
     }
+    if (this.opts.maxBytes !== undefined) {
+      let { bytes } = this.db.prepare('SELECT COALESCE(SUM(size), 0) AS bytes FROM response_cache').get() as { bytes: number };
+      while (bytes > this.opts.maxBytes) {
+        const oldest = this.db.prepare('SELECT key, size FROM response_cache ORDER BY created_at, rowid LIMIT 1').get() as { key: string; size: number } | undefined;
+        if (!oldest || oldest.key === key) break;
+        this.db.prepare('DELETE FROM response_cache WHERE key = ?').run(oldest.key);
+        bytes -= oldest.size;
+      }
+    }
   }
 
-  clear(): number {
-    return Number(this.db.prepare('DELETE FROM response_cache').run().changes);
+  /** Empties the cache, or only the entries that were answered by `model`. Returns how many were removed. */
+  clear(model?: string): number {
+    return Number(
+      (model === undefined
+        ? this.db.prepare('DELETE FROM response_cache').run()
+        : this.db.prepare('DELETE FROM response_cache WHERE model = ?').run(model)
+      ).changes,
+    );
   }
 
   stats(): CacheStats {
     const row = this.db
       .prepare('SELECT COUNT(*) AS entries, COALESCE(SUM(hits), 0) AS hits, COALESCE(SUM(size), 0) AS bytes FROM response_cache WHERE expires_at > ?')
       .get(this.now()) as unknown as CacheStats;
-    return { entries: row.entries, hits: row.hits, bytes: row.bytes };
+    return { entries: row.entries, hits: row.hits, bytes: row.bytes, served: { ...this.served } };
   }
 }

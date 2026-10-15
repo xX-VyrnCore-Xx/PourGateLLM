@@ -10,7 +10,7 @@ import type { ProviderEntry } from '@pourgate/shared';
 import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
 import type { KeyStore } from './keys.js';
 import { anthropicError, estimateInputTokens, toOpenAIRequest, validateRequest, wrapResponse } from './anthropic.js';
-import type { CachedResponse, ResponseCache } from './cache.js';
+import type { CacheResult, CachedResponse, ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
 import type { Metrics } from './metrics.js';
 import { PluginError, RejectedByPlugin, type PluginHost } from './plugins.js';
@@ -100,6 +100,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   const app = new Hono<{ Variables: { principal: Principal } }>();
   const doFetch = opts.fetch ?? fetch;
   const breaker = opts.breaker ?? new Breaker();
+  const inflight = new Map<string, Promise<CachedResponse | undefined>>();
   const envTokens = opts.envTokens ?? [];
   // Per-process secret that lets the admin playground call the gateway pipeline in-process.
   const internalSecret = randomBytes(32).toString('base64url');
@@ -299,7 +300,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     };
     const route = ROUTES[endpoint];
 
-    const record = (r: { routed: Response; totalMs: number; ttfbMs: number; tokens: number | null; error: string | null; cache: 'hit' | 'semantic' | 'miss' | null }) => {
+    const record = (r: { routed: Response; totalMs: number; ttfbMs: number; tokens: number | null; error: string | null; cache: CacheResult | null }) => {
       const provider = r.routed.headers.get('x-pourgate-provider');
       const model = r.routed.headers.get('x-pourgate-model');
       const complexity = r.routed.headers.get('x-pourgate-complexity');
@@ -375,9 +376,13 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     const semantic = cache ? opts.semantic : undefined;
     let queryVec: Float32Array | null = null;
     let context: string | undefined;
+    let serveCached: ((hit: CachedResponse, kind: Exclude<CacheResult, 'miss'>, extra?: Record<string, string>) => Response) | undefined;
+    // Identical cacheable requests that arrive while one is already being answered share its answer.
+    let finishFlight: (entry?: CachedResponse) => void = () => {};
     if (cache && !bypass && cache.eligible(payload)) {
       cacheKey = cache.key(scope, payload, `${privacy.pii}|${privacy.policy}`);
-      const serve = (hit: CachedResponse, kind: 'hit' | 'semantic', extra: Record<string, string> = {}): Response => {
+      const serve = (hit: CachedResponse, kind: Exclude<CacheResult, 'miss'>, extra: Record<string, string> = {}): Response => {
+        cache.note(kind);
         const headers = new Headers({ 'content-type': 'application/json', 'x-pourgate-cache': kind, age: String(Math.floor(hit.ageMs / 1000)), ...extra });
         if (hit.provider) headers.set('x-pourgate-provider', hit.provider);
         if (hit.model) headers.set('x-pourgate-model', hit.model);
@@ -388,6 +393,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         record({ routed: hitRes, totalMs: ms, ttfbMs: ms, tokens: null, error: null, cache: kind });
         return tag(hitRes);
       };
+      serveCached = serve;
       const hit = cache.get(cacheKey);
       if (hit) return serve(hit, 'hit');
       if (semantic) {
@@ -406,9 +412,26 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
           }
         }
       }
+      const pending = inflight.get(cacheKey);
+      if (pending) {
+        const shared = await pending;
+        if (shared) return serve({ ...shared, ageMs: 0 }, 'coalesced');
+      } else {
+        const key = cacheKey;
+        let settle: (entry?: CachedResponse) => void = () => {};
+        inflight.set(key, new Promise<CachedResponse | undefined>((resolve) => (settle = resolve)));
+        const giveUp = setTimeout(() => finishFlight(), 120_000);
+        finishFlight = (entry) => {
+          clearTimeout(giveUp);
+          if (inflight.delete(key)) settle(entry);
+        };
+      }
+      cache.note('miss');
     }
 
-    const routed = await routeChat(
+    let routed: Response;
+    try {
+      routed = await routeChat(
       {
         registry: getRegistry(),
         pools: opts.pools,
@@ -440,7 +463,22 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       endpoint,
       form,
     );
+    } catch (err) {
+      finishFlight();
+      throw err;
+    }
     const ttfbMs = performance.now() - startedAt;
+    if (cacheKey && cache && serveCached && routed.status === 503) {
+      // Every provider failed: an expired copy is better than an error (only if stale serving is enabled).
+      const stale = cache.getStale(cacheKey);
+      finishFlight();
+      if (stale) {
+        await routed.body?.cancel();
+        return serveCached(stale, 'stale', { warning: '110 - "Response is stale"' });
+      }
+    } else if (routed.status !== 200) {
+      finishFlight();
+    }
     const res =
       opts.requestLog || opts.metrics || tracer || opts.plugins?.hasHooks || cacheKey
         ? observeResponse(routed, startedAt, (f) => {
@@ -454,10 +492,19 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
                   complexity: routed.headers.get('x-pourgate-complexity'),
                 });
                 if (semantic && queryVec && context) semantic.index.add(cacheKey, scope, context, queryVec);
+                finishFlight({
+                  body: f.body.toString('utf8'),
+                  provider: routed.headers.get('x-pourgate-provider'),
+                  model: routed.headers.get('x-pourgate-model'),
+                  tier: routed.headers.get('x-pourgate-tier'),
+                  complexity: routed.headers.get('x-pourgate-complexity'),
+                  ageMs: 0,
+                });
               } catch (err) {
                 console.error('[cache] store failed:', err instanceof Error ? err.message : err);
               }
             }
+            finishFlight();
             record({ routed, totalMs: f.totalMs, ttfbMs, tokens: f.tokens, error: f.error, cache: cacheKey ? 'miss' : null });
           })
         : routed;

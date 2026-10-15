@@ -131,7 +131,8 @@ export const api = {
     request<{ ok: boolean; status: number | null }>(`/provider-keys/${id}/test`, { method: 'POST' }),
   evals: () => request<EvalInfo>('/evals'),
   runEvals: () => request<{ started: boolean }>('/evals/run', { method: 'POST', body: '{}' }),
-  cache: () => request<{ enabled: boolean; mode?: string; entries?: number; hits?: number; bytes?: number }>('/cache'),
+  cache: () =>
+    request<{ enabled: boolean; mode?: string; entries?: number; hits?: number; bytes?: number; served?: Record<string, number> }>('/cache'),
   clearCache: () => request<{ cleared: number }>('/cache', { method: 'DELETE' }),
   analytics: (range: string) => request<Analytics>(`/analytics?range=${encodeURIComponent(range)}`),
   /** Streams a playground answer; resolves with the route headers once the stream ends. */
