@@ -4,7 +4,9 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directories: ['/', '/packages/*']
+    # One pnpm workspace: Dependabot must start from the root so it can rewrite the single pnpm-lock.yaml.
+    # (Pointing it at each package left the lockfile untouched and every update failed `--frozen-lockfile`.)
+    directory: '/'
     schedule:
       interval: daily
     open-pull-requests-limit: 10
@@ -13,6 +15,10 @@ updates:
     groups:
       npm-minor-patch:
         update-types: ['minor', 'patch']
+    ignore:
+      # Major jumps (zod 4, vite 8, react 19, ...) need code changes: they are done by hand, deliberately.
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: '/'
