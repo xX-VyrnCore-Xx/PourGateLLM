@@ -1,8 +1,9 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { ProviderEntry } from '@pourgate/shared';
+import type { AuditLog } from './audit.js';
 import { KeyStoreError, type KeyStore } from './keys.js';
 import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
@@ -29,6 +30,7 @@ export interface AdminOptions {
   keyStore?: KeyStore;
   poolManager?: PoolManager;
   requestLog?: RequestLog;
+  audit?: AuditLog;
   cache?: ResponseCache;
   plugins?: PluginHost;
   observedLimits?: ObservedLimits;
@@ -80,18 +82,28 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     await next();
   });
 
-  app.post('/login', async (c) => {
-    let ip = 'unknown';
+  const clientIp = (c: Context): string => {
     try {
-      ip = getConnInfo(c).remote.address ?? 'unknown';
+      return getConnInfo(c).remote.address ?? 'unknown';
     } catch {
-      // no socket info (e.g. tests)
+      return 'unknown'; // no socket info (e.g. tests)
     }
-    if (!loginLimiter.take(ip, 10)) return c.json({ error: 'too many attempts, retry in a minute' }, 429);
+  };
+
+  app.post('/login', async (c) => {
+    const ip = clientIp(c);
+    if (!loginLimiter.take(ip, 10)) {
+      opts.audit?.record('login_rate_limited', { ip });
+      return c.json({ error: 'too many attempts, retry in a minute' }, 429);
+    }
 
     const body = (await c.req.json().catch(() => null)) as { password?: unknown } | null;
     const supplied = typeof body?.password === 'string' ? body.password : '';
-    if (!timingSafeEqual(sha(supplied), passwordDigest)) return c.json({ error: 'invalid password' }, 401);
+    if (!timingSafeEqual(sha(supplied), passwordDigest)) {
+      opts.audit?.record('login_failed', { ip });
+      return c.json({ error: 'invalid password' }, 401);
+    }
+    opts.audit?.record('login', { ip });
 
     const id = randomBytes(32).toString('base64url');
     sessions.set(id, now() + SESSION_TTL_MS);
@@ -107,7 +119,10 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
 
   app.post('/logout', (c) => {
     const id = getCookie(c, COOKIE);
-    if (id) sessions.delete(id);
+    if (id) {
+      sessions.delete(id);
+      opts.audit?.record('logout', { ip: clientIp(c) });
+    }
     deleteCookie(c, COOKIE, { path: COOKIE_PATH });
     return c.body(null, 204);
   });
@@ -147,13 +162,16 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
       dailyRequestLimit: daily,
       expiresAt: days ? now() + days * 86_400_000 : undefined,
     });
+    opts.audit?.record('token_create', { ip: clientIp(c), target: `#${record.id}`, detail: name });
     return c.json({ token, record }, 201);
   });
 
   app.delete('/tokens/:id', (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.json({ error: 'invalid id' }, 400);
-    return opts.store.revoke(id) ? c.body(null, 204) : c.json({ error: 'not found or already revoked' }, 404);
+    if (!opts.store.revoke(id)) return c.json({ error: 'not found or already revoked' }, 404);
+    opts.audit?.record('token_revoke', { ip: clientIp(c), target: `#${id}` });
+    return c.body(null, 204);
   });
 
   const syncLimiter = new SlidingWindow(60_000, now);
@@ -161,6 +179,7 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
   app.post('/registry/sync', async (c) => {
     if (!opts.registrySync) return c.json({ error: 'registry sync is not configured' }, 404);
     if (!syncLimiter.take('sync', 6)) return c.json({ error: 'too many sync requests' }, 429);
+    opts.audit?.record('registry_sync', { ip: clientIp(c) });
     return c.json(await opts.registrySync.sync());
   });
 
@@ -200,6 +219,7 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     if (!evalLimiter.take('run', 3)) return c.json({ error: 'too many requests' }, 429);
     const body = (await c.req.json().catch(() => ({}))) as { models?: unknown };
     const models = Array.isArray(body?.models) && body.models.every((m) => typeof m === 'string') ? (body.models as string[]) : undefined;
+    opts.audit?.record('eval_run', { ip: clientIp(c), detail: models ? `${models.length} model(s)` : 'all models' });
     void e.runner.run({ tasksPerModel: e.tasksPerModel, models }).catch((err) => console.error('[evals]', err instanceof Error ? err.message : err));
     return c.json({ started: true }, 202);
   });
@@ -207,7 +227,14 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
   app.get('/cache', (c) => c.json(opts.cache ? { enabled: true, mode: opts.cache.mode, ...opts.cache.stats() } : { enabled: false }));
   app.delete('/cache', (c) => {
     if (!opts.cache) return c.json({ error: 'cache is not enabled' }, 404);
-    return c.json({ cleared: opts.cache.clear() });
+    const cleared = opts.cache.clear();
+    opts.audit?.record('cache_clear', { ip: clientIp(c), detail: `${cleared} entries` });
+    return c.json({ cleared });
+  });
+
+  app.get('/audit', (c) => {
+    if (!opts.audit) return c.json({ error: 'audit log is not configured' }, 404);
+    return c.json(opts.audit.recent(Number(c.req.query('limit') ?? 100) || 100, c.req.query('action') || undefined));
   });
 
   app.get('/requests', (c) => {
@@ -245,6 +272,7 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     try {
       const record = opts.keyStore!.add(entry.provider, b.key, typeof b.label === 'string' ? b.label : undefined);
       opts.poolManager!.refresh();
+      opts.audit?.record('provider_key_add', { ip: clientIp(c), target: entry.provider, detail: `…${record.last4}` });
       return c.json(record, 201);
     } catch (err) {
       if (err instanceof KeyStoreError) return c.json({ error: err.message }, 400);
@@ -258,6 +286,7 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     if (!Number.isInteger(id)) return c.json({ error: 'invalid id' }, 400);
     if (!opts.keyStore!.remove(id)) return c.json({ error: 'not found' }, 404);
     opts.poolManager!.refresh();
+    opts.audit?.record('provider_key_remove', { ip: clientIp(c), target: `#${id}` });
     return c.body(null, 204);
   });
 

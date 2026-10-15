@@ -86,6 +86,15 @@ export interface EvalInfo {
   scores?: { provider: string; model: string; samples: number; quality: number; reliability: number; p50Ms: number | null; lastRun: number }[];
 }
 
+export interface AuditRow {
+  id: number;
+  ts: number;
+  action: string;
+  ip: string | null;
+  target: string | null;
+  detail: string | null;
+}
+
 export const api = {
   session: () => request<{ authenticated: boolean }>('/session'),
   login: (password: string) => request<void>('/login', { method: 'POST', body: JSON.stringify({ password }) }),
@@ -110,6 +119,7 @@ export const api = {
   cache: () => request<{ enabled: boolean; mode?: string; entries?: number; hits?: number; bytes?: number }>('/cache'),
   clearCache: () => request<{ cleared: number }>('/cache', { method: 'DELETE' }),
   analytics: (range: string) => request<Analytics>(`/analytics?range=${encodeURIComponent(range)}`),
+  audit: () => request<AuditRow[]>('/audit?limit=200'),
   registry: () => request<RegistryStatus | null>('/registry'),
   syncRegistry: () => request<RegistryStatus>('/registry/sync', { method: 'POST' }),
 };

@@ -16,6 +16,7 @@ import { Tracer, parseHeaders } from './otel.js';
 import { PluginHost } from './plugins.js';
 import { SemanticIndex } from './semantic.js';
 import { ObservedLimits } from './ratelimits.js';
+import { AuditLog } from './audit.js';
 import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
 import { SqliteUsage, makeFingerprint, pruneUsage } from './usage.js';
@@ -42,6 +43,7 @@ const poolManager = new PoolManager(keyStore, process.env, console.warn, (provid
   fingerprint,
 }));
 const requestLog = new RequestLog(db);
+const audit = new AuditLog(db);
 let plugins: PluginHost;
 try {
   plugins = await PluginHost.load(process.env.POURGATE_PLUGINS_DIR ?? 'plugins');
@@ -80,6 +82,7 @@ const prune = () => {
   pruneUsage(db);
   evalStore.prune(Date.now() - 30 * 86_400_000);
   requestLog.prune(Date.now() - retentionMs);
+  audit.prune(Date.now() - 180 * 86_400_000);
 };
 prune();
 setInterval(prune, 6 * 3_600_000).unref();
@@ -170,6 +173,7 @@ serve(
       evals,
       cache,
       requestLog,
+      audit,
       metrics: new Metrics(),
       metricsToken: process.env.POURGATE_METRICS_TOKEN || undefined,
       adminPassword: process.env.POURGATE_ADMIN_PASSWORD || undefined,

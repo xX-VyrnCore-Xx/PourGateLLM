@@ -4,11 +4,12 @@ import { api } from './lib/api';
 import { useT } from './lib/i18n';
 import { cn } from './lib/utils';
 import { Analytics } from './pages/Analytics';
+import { Audit } from './pages/Audit';
 import { Login } from './pages/Login';
 import { Providers } from './pages/Providers';
 import { Tokens } from './pages/Tokens';
 
-type Tab = 'tokens' | 'providers' | 'analytics';
+type Tab = 'tokens' | 'providers' | 'analytics' | 'audit';
 
 export function App() {
   const t = useT();
@@ -33,7 +34,7 @@ export function App() {
           {t('appName')}
         </h1>
         <nav className="flex gap-1 rounded-xl border border-border bg-white/70 p-1 dark:bg-neutral-900/60" aria-label="Main">
-          {(['tokens', 'providers', 'analytics'] as const).map((k) => (
+          {(['tokens', 'providers', 'analytics', 'audit'] as const).map((k) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -56,6 +57,7 @@ export function App() {
       </header>
       {tab === 'tokens' && <Tokens onUnauthorized={() => setAuth('out')} />}
       {tab === 'providers' && <Providers onUnauthorized={() => setAuth('out')} />}
+      {tab === 'audit' && <Audit onUnauthorized={() => setAuth('out')} />}
       {tab === 'analytics' && <Analytics onUnauthorized={() => setAuth('out')} />}
     </div>
   );

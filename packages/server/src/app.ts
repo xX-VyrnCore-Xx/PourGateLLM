@@ -1,3 +1,4 @@
+import type { AuditLog } from './audit.js';
 import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
@@ -61,6 +62,7 @@ export interface AppOptions {
   cache?: ResponseCache;
   /** Request metadata log (SQLite); enables analytics in the admin API. */
   requestLog?: RequestLog;
+  audit?: AuditLog;
   /** Prometheus metrics registry; exposed at /metrics when `metricsToken` is also set. */
   metrics?: Metrics;
   metricsToken?: string;
@@ -504,6 +506,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         keyStore: opts.keyStore,
         poolManager: opts.poolManager,
         requestLog: opts.requestLog,
+        audit: opts.audit,
         cache: opts.cache,
         evals: opts.evals,
         plugins: opts.plugins,
