@@ -42,9 +42,14 @@ export function Playground({ onUnauthorized }: { onUnauthorized: () => void }) {
     setPrompt('');
     setBusy(true);
     try {
-      const result = await api.playground(
+      let acc = '';
+      const result = await api.playgroundStream(
         model,
         history.filter((x) => !x.failed).map(({ role, content }) => ({ role, content })),
+        (delta) => {
+          acc += delta;
+          setTurns([...history, { role: 'assistant', content: acc }]);
+        },
       );
       setTurns([...history, { role: 'assistant', content: result.content ?? result.error ?? t('error'), result, failed: !result.ok }]);
     } catch (err) {
