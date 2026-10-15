@@ -95,6 +95,16 @@ export interface AuditRow {
   detail: string | null;
 }
 
+export interface PlaygroundResult {
+  ok: boolean;
+  status: number;
+  content: string | null;
+  error: string | null;
+  tokens: number | null;
+  elapsedMs: number;
+  route: { provider: string | null; model: string | null; tier: string | null; complexity: string | null; cache: string | null };
+}
+
 export const api = {
   session: () => request<{ authenticated: boolean }>('/session'),
   login: (password: string) => request<void>('/login', { method: 'POST', body: JSON.stringify({ password }) }),
@@ -119,6 +129,8 @@ export const api = {
   cache: () => request<{ enabled: boolean; mode?: string; entries?: number; hits?: number; bytes?: number }>('/cache'),
   clearCache: () => request<{ cleared: number }>('/cache', { method: 'DELETE' }),
   analytics: (range: string) => request<Analytics>(`/analytics?range=${encodeURIComponent(range)}`),
+  playground: (model: string, messages: { role: string; content: string }[]) =>
+    request<PlaygroundResult>('/playground', { method: 'POST', body: JSON.stringify({ model, messages }) }),
   audit: () => request<AuditRow[]>('/audit?limit=200'),
   registry: () => request<RegistryStatus | null>('/registry'),
   syncRegistry: () => request<RegistryStatus>('/registry/sync', { method: 'POST' }),

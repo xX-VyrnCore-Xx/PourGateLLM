@@ -1,5 +1,5 @@
 import type { AuditLog } from './audit.js';
-import { timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { Hono, type Context } from 'hono';
@@ -95,6 +95,8 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   const app = new Hono<{ Variables: { principal: Principal } }>();
   const doFetch = opts.fetch ?? fetch;
   const envTokens = opts.envTokens ?? [];
+  // Per-process secret that lets the admin playground call the gateway pipeline in-process.
+  const internalSecret = randomBytes(32).toString('base64url');
   const getRegistry = typeof opts.registry === 'function' ? opts.registry : () => opts.registry as ProviderEntry[];
   const rpm = new SlidingWindow();
 
@@ -172,7 +174,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         ? anthropicError(401, 'Invalid or missing API key')
         : errorResponse(401, 'Invalid or missing API token', 'invalid_request_error', 'invalid_api_key');
     if (!token) return invalid();
-    if (envTokens.length > 0 && matchesAny(token, envTokens)) {
+    if (matchesAny(token, [internalSecret]) || (envTokens.length > 0 && matchesAny(token, envTokens))) {
       c.set('principal', { kind: 'env' });
     } else {
       const record = opts.store.verify(token);
@@ -507,6 +509,14 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         poolManager: opts.poolManager,
         requestLog: opts.requestLog,
         audit: opts.audit,
+        playground: (body) =>
+          app.fetch(
+            new Request('http://internal.invalid/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', authorization: `Bearer ${internalSecret}` },
+              body: JSON.stringify(body),
+            }),
+          ),
         cache: opts.cache,
         evals: opts.evals,
         plugins: opts.plugins,

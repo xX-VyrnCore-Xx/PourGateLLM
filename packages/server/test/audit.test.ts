@@ -66,3 +66,38 @@ describe('audit log', () => {
     expect(audit.recent(0)).toHaveLength(1);
   });
 });
+
+describe('playground', () => {
+  const upstream = (async () =>
+    new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'hi there' } }], usage: { total_tokens: 7 } }), {
+      headers: { 'content-type': 'application/json' },
+    })) as typeof fetch;
+
+  function playApp() {
+    const db = openDatabase(':memory:');
+    const seen: unknown[] = [];
+    const fetcher = (async (url: unknown, init?: RequestInit) => {
+      seen.push(JSON.parse(String(init?.body)));
+      return upstream(url as string, init);
+    }) as typeof fetch;
+    const app = createApp({ registry, store: new TokenStore(db), pools: new Map([['groq', new KeyPool(['secret-key-1'])]]), adminPassword: 'hunter2', audit: new AuditLog(db), fetch: fetcher });
+    return { app, seen };
+  }
+
+  it('routes a prompt through the gateway and reports the route', async () => {
+    const { app, seen } = playApp();
+    const cookie = (await login(app)).headers.get('set-cookie')!.split(';')[0]!;
+    const res = await app.request('/admin/api/playground', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ model: 'auto', messages: [{ role: 'user', content: 'hello' }], max_tokens: 99999 }) });
+    const body = (await res.json()) as { ok: boolean; content: string; route: { provider: string; model: string }; tokens: number };
+    expect(body).toMatchObject({ ok: true, content: 'hi there', tokens: 7, route: { provider: 'groq', model: 'm1' } });
+    expect((seen[0] as { max_tokens: number }).max_tokens).toBe(1024);
+  });
+
+  it('requires a session and valid input; the internal secret does not work from outside', async () => {
+    const { app } = playApp();
+    expect((await app.request('/admin/api/playground', { method: 'POST', headers: json, body: '{}' })).status).toBe(401);
+    const cookie = (await login(app)).headers.get('set-cookie')!.split(';')[0]!;
+    expect((await app.request('/admin/api/playground', { method: 'POST', headers: { ...json, cookie }, body: '{"model":"auto"}' })).status).toBe(400);
+    expect((await app.request('/v1/chat/completions', { method: 'POST', headers: { ...json, authorization: 'Bearer guess' }, body: '{}' })).status).toBe(401);
+  });
+});
