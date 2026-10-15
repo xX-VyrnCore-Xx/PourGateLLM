@@ -18,7 +18,7 @@ cd packages/desktop/src-tauri && cargo tauri build   # or `cargo tauri dev`
 
 ## First launch
 A welcome screen shows your generated dashboard password and API token (copy them: the password is also in the settings file). The app creates `.env` in its app-data directory (Linux: `~/.local/share/dev.pourgatellm.desktop/`) with a random admin password and API token. Edit it to add provider keys, then restart.
-The gateway listens on port `43117` (it is not bound to loopback only, so keep the port closed in your firewall); other `POURGATE_*` variables in that `.env` work as documented in the main README.
+The gateway listens on `127.0.0.1:43117` only, so it is not reachable from other machines; other `POURGATE_*` variables in that `.env` work as documented in the main README.
 
 ## Uninstall
 Remove it from *Settings → Apps*. The installer keeps your data: delete `%APPDATA%\dev.pourgatellm.desktop` (Windows) or `~/.local/share/dev.pourgatellm.desktop` (Linux) to remove the config, database and keys as well. The NSIS uninstaller may offer to delete app data; this is untested.

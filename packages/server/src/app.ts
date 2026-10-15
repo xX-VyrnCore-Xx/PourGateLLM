@@ -22,6 +22,7 @@ import { observeResponse } from './observe.js';
 import type { RequestLog } from './requestlog.js';
 import { KeyPool } from './keypool.js';
 import type { PoolManager } from './pools.js';
+import { getConnInfo } from '@hono/node-server/conninfo';
 import { SlidingWindow } from './ratelimit.js';
 import { VIRTUAL_MODELS, errorResponse, routeChat, type Endpoint, type Scoring } from './router.js';
 import type { TokenRecord, TokenStore } from './tokens.js';
@@ -106,6 +107,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   const internalSecret = randomBytes(32).toString('base64url');
   const getRegistry = typeof opts.registry === 'function' ? opts.registry : () => opts.registry as ProviderEntry[];
   const rpm = new SlidingWindow();
+  const authFailures = new SlidingWindow();
 
   /** Embeds a prompt through the normal embeddings pipeline (keys, limits, failover, privacy). Null on any failure. */
   const embedQuery = async (model: string, text: string, privacy: PrivacyConfig, signal?: AbortSignal): Promise<Float32Array | null> => {
@@ -159,6 +161,27 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     });
   }
 
+  // Browser hardening for the dashboard and admin API (not for the API proxy or metrics, which are not pages).
+  // The dashboard needs no inline scripts, third-party origins or framing, so the policy is strict.
+  const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+  app.use('*', async (c, next) => {
+    await next();
+    if (c.req.path.startsWith('/v1/') || c.req.path === '/metrics') return;
+    try {
+      const h = c.res.headers;
+      h.set('content-security-policy', CSP);
+      h.set('x-content-type-options', 'nosniff');
+      h.set('x-frame-options', 'DENY');
+      h.set('referrer-policy', 'no-referrer');
+      h.set('permissions-policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+      h.set('cross-origin-opener-policy', 'same-origin');
+      if (opts.secureCookie) h.set('strict-transport-security', 'max-age=31536000; includeSubDomains');
+      if (c.req.path.startsWith('/admin/api')) h.set('cache-control', 'no-store');
+    } catch {
+      // immutable response (e.g. a proxied one): leave it as it is
+    }
+  });
+
   // Request size limits, applied before authentication so oversized bodies are never read.
   const tooLarge = (c: Context) =>
     c.req.path.startsWith('/v1/messages')
@@ -180,12 +203,24 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       c.req.path.startsWith('/v1/messages')
         ? anthropicError(401, 'Invalid or missing API key')
         : errorResponse(401, 'Invalid or missing API token', 'invalid_request_error', 'invalid_api_key');
-    if (!token) return invalid();
+    // Failed attempts per client address are capped, so tokens cannot be guessed at speed.
+    const failed = () => {
+      let ip = 'unknown';
+      try {
+        ip = getConnInfo(c).remote.address ?? 'unknown';
+      } catch {
+        // no socket info (tests)
+      }
+      return authFailures.take(ip, 30)
+        ? invalid()
+        : errorResponse(429, 'Too many failed authentication attempts, retry in a minute', 'rate_limit_error', 'too_many_failed_auth');
+    };
+    if (!token) return failed();
     if (matchesAny(token, [internalSecret]) || (envTokens.length > 0 && matchesAny(token, envTokens))) {
       c.set('principal', { kind: 'env' });
     } else {
       const record = opts.store.verify(token);
-      if (!record) return invalid();
+      if (!record) return failed();
       c.set('principal', { kind: 'client', record });
     }
     await next();

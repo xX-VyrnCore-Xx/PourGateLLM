@@ -153,7 +153,9 @@ cp .env.example .env          # set POURGATE_TOKENS, POURGATE_ADMIN_PASSWORD and
 docker compose up -d --build
 ```
 
-Release tarballs (server + dashboard + registry) are attached to each [GitHub Release](https://github.com/xX-VyrnCore-Xx/PourGateLLM/releases).
+Release tarballs (server + dashboard + registry) are attached to each [GitHub Release](https://github.com/xX-VyrnCore-Xx/PourGateLLM/releases); only the three newest releases are kept.
+
+> The gateway listens on `127.0.0.1` (and Docker publishes it on `127.0.0.1`) so nothing is exposed by accident. To reach it from other machines set `POURGATE_HOST=0.0.0.0` (Docker: `POURGATE_BIND=0.0.0.0`) and put HTTPS and a firewall in front.
 
 ### From source
 
@@ -394,6 +396,7 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_REGISTRY_SYNC_HOURS` | `12` | Sync interval. |
 | `POURGATE_CACHE_STALE_SECONDS` | `0` | Keep expired cache entries this long and serve them only when every provider fails. |
 | `POURGATE_CACHE_MAX_MB` | unlimited | Cap on stored cache bytes (oldest evicted first). |
+| `POURGATE_HOST` | `127.0.0.1` | Address to listen on. `0.0.0.0` accepts other machines (the Docker image sets it, and publishes the port on loopback only unless `POURGATE_BIND` says otherwise). |
 | `POURGATE_UPSTREAM_TIMEOUT_MS` | `60000` | How long to wait for a provider to start answering before failing over (streams may run longer once started). |
 | `POURGATE_BREAKER_THRESHOLD` | `5` | Consecutive failures (5xx, network, timeout) after which a model is skipped for a growing pause (30 s up to 5 min); it is still tried last if nothing else answers. |
 | `POURGATE_MAX_BODY_MB` | `20` | Largest accepted JSON request body (`413` above it). |
@@ -485,6 +488,9 @@ Registry entries decide **where your API keys are sent**, so remote data is trea
 - Client tokens stored only as **SHA-256 hashes**; the plaintext is shown once, at creation.
 - Constant-time token comparison, login rate limiting, `SameSite=Strict` sessions, cross-origin write protection, request size limits (413) applied before any body is read.
 - Registry sync hardened against endpoint hijacking, rollback and oversized payloads.
+- **Safe by default**: listens on `127.0.0.1` only, strict dashboard CSP and security headers, failed-auth throttling, weak dashboard passwords refused, hardened container.
+- **Verifiable releases**: published checksums (checked by the installers) and signed build-provenance attestations.
+- **Always current**: Dependabot with auto-merged minor/patch updates, CodeQL and dependency review on every pull request.
 
 Found a vulnerability? Please report it privately, see [SECURITY.md](SECURITY.md) (it also has a hardening checklist for operators).
 

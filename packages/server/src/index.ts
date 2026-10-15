@@ -152,9 +152,19 @@ if (existsSync(suitePath)) {
   console.warn(`[evals] suite not found at ${suitePath}: evals disabled`);
 }
 
-if (!process.env.POURGATE_ADMIN_PASSWORD) {
+const adminPassword = process.env.POURGATE_ADMIN_PASSWORD || undefined;
+if (!adminPassword) {
   console.warn('POURGATE_ADMIN_PASSWORD not set: dashboard/admin API disabled (use the CLI to manage tokens)');
+} else if (adminPassword.length < 8) {
+  console.error('POURGATE_ADMIN_PASSWORD is shorter than 8 characters: refusing to start with a guessable dashboard password.');
+  process.exit(1);
+} else if (adminPassword.length < 12) {
+  console.warn('POURGATE_ADMIN_PASSWORD is shorter than 12 characters: use a longer one (e.g. "openssl rand -base64 18").');
 }
+
+// Listen on the loopback interface unless told otherwise: exposing the gateway to a network is a decision.
+const host = process.env.POURGATE_HOST || '127.0.0.1';
+const exposed = !['127.0.0.1', 'localhost', '::1'].includes(host);
 
 const port = Number(process.env.PORT ?? 3000);
 const server = serve(
@@ -183,17 +193,20 @@ const server = serve(
       audit,
       metrics: new Metrics(),
       metricsToken: process.env.POURGATE_METRICS_TOKEN || undefined,
-      adminPassword: process.env.POURGATE_ADMIN_PASSWORD || undefined,
+      adminPassword,
       secureCookie: process.env.POURGATE_COOKIE_SECURE === 'true',
       staticDir: resolve(process.env.POURGATE_STATIC_DIR ?? (existsSync('public') ? 'public' : 'packages/client/dist')),
     }).fetch,
     port,
+    hostname: host,
   },
   (info) => {
     const enabled = [...poolManager.pools.keys()];
-    console.log(`PourGateLLM listening on :${info.port} (${enabled.length} provider(s) enabled${enabled.length ? `: ${enabled.join(', ')}` : ''})`);
+    console.log(`PourGateLLM listening on ${host}:${info.port} (${enabled.length} provider(s) enabled${enabled.length ? `: ${enabled.join(', ')}` : ''})`);
     console.log(`  API base URL  http://localhost:${info.port}/v1`);
-    if (process.env.POURGATE_ADMIN_PASSWORD) console.log(`  Dashboard     http://localhost:${info.port}/`);
+    if (adminPassword) console.log(`  Dashboard     http://localhost:${info.port}/`);
+    if (exposed) console.warn(`  Reachable from the network (${host}). Put it behind HTTPS and a firewall; set POURGATE_COOKIE_SECURE=true when serving HTTPS.`);
+    else console.log('  Local only (127.0.0.1). Set POURGATE_HOST=0.0.0.0 to accept connections from other machines.');
     if (enabled.length === 0) console.log('  No provider has an API key yet: run "pourgate setup" (or add keys in the dashboard) to get started.');
     if (process.env.POURGATE_REGISTRY_URL) {
       const hours = Number(process.env.POURGATE_REGISTRY_SYNC_HOURS ?? 12);

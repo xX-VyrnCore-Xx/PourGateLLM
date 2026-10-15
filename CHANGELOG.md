@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Security: gateway listens on 127.0.0.1 by default (`POURGATE_HOST`; **behaviour change** for anyone reaching it from another machine), strict CSP and security headers for the dashboard, failed-auth throttling on the API, dashboard passwords under 8 characters refused, hardened compose files (`no-new-privileges`, no capabilities, loopback port), release checksums verified by the installers and signed build-provenance attestations.
+- Repository: Dependabot (npm daily, actions/docker/cargo weekly) with auto-merge for minor/patch, CodeQL, dependency review, least-privilege workflows, CODEOWNERS.
+- Releases: older ones are pruned automatically, keeping the newest three (`.github/workflows/cleanup-releases.yml`).
 - Windows app: ships its own Node.js runtime (no prerequisites), hides the gateway console, writes `gateway.log`, shows a welcome screen with the generated credentials (EN/IT), current-user installer with English/Italian installer languages.
 
 - Dashboard: Overview tab (setup checklist, provider health, copy-paste connection snippets), light/dark/system theme switch, English/Italian language switch, "get a key" links.

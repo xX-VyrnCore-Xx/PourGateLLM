@@ -25,6 +25,19 @@ try {
   $Archive = Join-Path $Tmp 'pg.tar.gz'
   Invoke-WebRequest "https://github.com/$Repo/releases/download/v$Version/pourgatellm-$Version.tar.gz" -OutFile $Archive
 
+  # Verify the download against the checksum published with the release (older releases have none).
+  $SumsFile = Join-Path $Tmp 'SHA256SUMS'
+  $HaveSums = $true
+  try { Invoke-WebRequest "https://github.com/$Repo/releases/download/v$Version/SHA256SUMS" -OutFile $SumsFile } catch { $HaveSums = $false }
+  if ($HaveSums) {
+    $line = Select-String -Path $SumsFile -Pattern ("  pourgatellm-" + [regex]::Escape($Version) + "\.tar\.gz$") | Select-Object -First 1
+    if (-not $line) { throw "SHA256SUMS does not list pourgatellm-$Version.tar.gz" }
+    $expected = ($line.Line -split '\s+')[0]
+    $actual = (Get-FileHash $Archive -Algorithm SHA256).Hash
+    if ($expected -ne $actual) { throw 'Checksum mismatch: the download is corrupt or has been tampered with.' }
+    Write-Host 'Checksum verified.'
+  } else { Write-Host 'Note: this release publishes no checksum file; skipping verification.' }
+
   # Replace the application; data and config.env in $Root are kept.
   $App = Join-Path $Root 'app'
   if (Test-Path (Join-Path $App 'VERSION')) { Write-Host "Updating from $((Get-Content (Join-Path $App 'VERSION') -Raw).Trim())..." }

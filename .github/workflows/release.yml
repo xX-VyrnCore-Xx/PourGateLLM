@@ -12,6 +12,8 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write       # signed build provenance
+  attestations: write
 
 jobs:
   verify:
@@ -29,6 +31,8 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -50,10 +54,13 @@ jobs:
           cp README.md LICENSE .env.example dist-release/pourgatellm/
           echo "${VERSION}" > dist-release/pourgatellm/VERSION
           tar -czf "pourgatellm-${VERSION}.tar.gz" -C dist-release pourgatellm
+          sha256sum "pourgatellm-${VERSION}.tar.gz" > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: bundle
-          path: pourgatellm-*.tar.gz
+          path: |
+            pourgatellm-*.tar.gz
+            SHA256SUMS
 
   image:
     needs: verify
@@ -73,7 +80,8 @@ jobs:
           tags: |
             type=raw,value=${{ needs.verify.outputs.version }}
             type=raw,value=latest
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
@@ -81,6 +89,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Attest the image build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
   release:
     needs: [verify, image]
@@ -90,6 +104,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: bundle
+      - name: Attest the tarball build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: pourgatellm-*.tar.gz
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -97,10 +115,10 @@ jobs:
           TAG="v${{ needs.verify.outputs.version }}"
           # The release may already exist (created from the GitHub UI): then just attach the bundle.
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" pourgatellm-*.tar.gz --clobber
+            gh release upload "$TAG" pourgatellm-*.tar.gz SHA256SUMS --clobber
           else
             # --target only matters when the tag does not exist yet (manual run): it is created at this commit.
-            gh release create "$TAG" pourgatellm-*.tar.gz \
+            gh release create "$TAG" pourgatellm-*.tar.gz SHA256SUMS \
               --title "PourGateLLM $TAG" \
               --generate-notes \
               --target "$GITHUB_SHA"
