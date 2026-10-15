@@ -27,7 +27,7 @@ export class Metrics {
   private readonly cacheResults = new Map<string, { labels: Record<string, string>; n: number }>();
   private readonly hist = new Map<string, { labels: Record<string, string>; counts: number[]; sum: number; n: number }>();
 
-  cache(result: 'hit' | 'miss'): void {
+  cache(result: 'hit' | 'semantic' | 'miss'): void {
     bump(this.cacheResults, { result }, 1);
   }
 

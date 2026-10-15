@@ -17,8 +17,8 @@ export interface LogEntry {
   tokens: number | null;
   /** Number of PII items masked before forwarding; null when masking was not applied. */
   redacted: number | null;
-  /** 'hit' when served from the response cache, 'miss' when cacheable but not found, null otherwise. */
-  cache: 'hit' | 'miss' | null;
+  /** 'hit' exact cache hit, 'semantic' served for a similar prompt, 'miss' cacheable but not found, null otherwise. */
+  cache: 'hit' | 'semantic' | 'miss' | null;
   stream: boolean;
   error: string | null;
 }
@@ -78,7 +78,7 @@ const toEntry = (r: Row): LogEntry => ({
   totalMs: r.total_ms,
   tokens: r.tokens,
   redacted: r.redacted,
-  cache: r.cache === 'hit' || r.cache === 'miss' ? r.cache : null,
+  cache: r.cache === 'hit' || r.cache === 'semantic' || r.cache === 'miss' ? r.cache : null,
   stream: r.stream === 1,
   error: r.error,
 });
@@ -127,7 +127,7 @@ export class RequestLog {
       const err = isError(r);
       if (err) errors++;
       tokens += r.tokens ?? 0;
-      if (r.cache === 'hit') cacheHits++;
+      if (r.cache === 'hit' || r.cache === 'semantic') cacheHits++;
       if (!err) all.push(r.total_ms);
       const key = `${r.provider ?? '-'}|${r.model ?? '-'}`;
       let m = perModel.get(key);

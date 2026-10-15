@@ -102,6 +102,14 @@ const MIGRATIONS: string[] = [
      observed_at INTEGER NOT NULL,
      PRIMARY KEY (provider, model)
    );`,
+  `CREATE TABLE semantic_index (
+     key TEXT PRIMARY KEY,
+     scope TEXT NOT NULL,
+     context TEXT NOT NULL,
+     dim INTEGER NOT NULL,
+     vector BLOB NOT NULL
+   );
+   CREATE INDEX idx_semantic_lookup ON semantic_index(scope, context);`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

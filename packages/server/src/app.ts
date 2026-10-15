@@ -7,11 +7,12 @@ import type { ProviderEntry } from '@pourgate/shared';
 import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
 import type { KeyStore } from './keys.js';
 import { anthropicError, estimateInputTokens, toOpenAIRequest, validateRequest, wrapResponse } from './anthropic.js';
-import type { ResponseCache } from './cache.js';
+import type { CachedResponse, ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
 import type { Metrics } from './metrics.js';
 import { PluginError, RejectedByPlugin, type PluginHost } from './plugins.js';
 import type { ObservedLimits } from './ratelimits.js';
+import { contextHash, lastUserText, type SemanticIndex } from './semantic.js';
 import { newSpanId, newTraceId, parseTraceparent, type Tracer } from './otel.js';
 import { DEFAULT_PRIVACY, tighten, type PrivacyConfig } from './privacy.js';
 import { observeResponse } from './observe.js';
@@ -49,6 +50,8 @@ export interface AppOptions {
   observedLimits?: ObservedLimits;
   /** Trusted plugins: request hooks, response observers and provider adapters. */
   plugins?: PluginHost;
+  /** Semantic cache on top of the exact-match cache (needs `cache`). `model` is an embeddings model id or `auto`. */
+  semantic?: { index: SemanticIndex; model: string };
   /** OTLP trace exporter; tracing is off when unset. */
   tracer?: Tracer;
   /** Exact-match response cache; disabled when unset. */
@@ -89,6 +92,28 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   const envTokens = opts.envTokens ?? [];
   const getRegistry = typeof opts.registry === 'function' ? opts.registry : () => opts.registry as ProviderEntry[];
   const rpm = new SlidingWindow();
+
+  /** Embeds a prompt through the normal embeddings pipeline (keys, limits, failover, privacy). Null on any failure. */
+  const embedQuery = async (model: string, text: string, privacy: PrivacyConfig, signal?: AbortSignal): Promise<Float32Array | null> => {
+    try {
+      const timeout = AbortSignal.timeout(5000);
+      const res = await routeChat(
+        { registry: getRegistry(), pools: opts.pools, fetch: doFetch, privacy, observedLimits: opts.observedLimits, softFail: true },
+        { model, input: text },
+        model,
+        signal ? AbortSignal.any([timeout, signal]) : timeout,
+        'embeddings',
+      );
+      if (!res.ok) {
+        await res.body?.cancel();
+        return null;
+      }
+      const v = ((await res.json()) as { data?: { embedding?: unknown }[] }).data?.[0]?.embedding;
+      return Array.isArray(v) && v.length > 0 && v.every((n) => typeof n === 'number' && Number.isFinite(n)) ? Float32Array.from(v as number[]) : null;
+    } catch {
+      return null;
+    }
+  };
   const maxUploadBytes = opts.maxUploadBytes ?? 25 * 1024 * 1024;
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
@@ -248,7 +273,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     };
     const route = ROUTES[endpoint];
 
-    const record = (r: { routed: Response; totalMs: number; ttfbMs: number; tokens: number | null; error: string | null; cache: 'hit' | 'miss' | null }) => {
+    const record = (r: { routed: Response; totalMs: number; ttfbMs: number; tokens: number | null; error: string | null; cache: 'hit' | 'semantic' | 'miss' | null }) => {
       const provider = r.routed.headers.get('x-pourgate-provider');
       const model = r.routed.headers.get('x-pourgate-model');
       const complexity = r.routed.headers.get('x-pourgate-complexity');
@@ -320,19 +345,40 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       /\b(no-cache|no-store)\b/.test(cacheControl) ||
       ['bypass', 'no-store', 'no-cache'].includes((c.req.header('x-pourgate-cache') ?? '').toLowerCase());
     let cacheKey: string | undefined;
+    const scope = clientId !== undefined ? `client:${clientId}` : 'env';
+    const semantic = cache ? opts.semantic : undefined;
+    let queryVec: Float32Array | null = null;
+    let context: string | undefined;
     if (cache && !bypass && cache.eligible(payload)) {
-      cacheKey = cache.key(clientId !== undefined ? `client:${clientId}` : 'env', payload, `${privacy.pii}|${privacy.policy}`);
-      const hit = cache.get(cacheKey);
-      if (hit) {
-        const headers = new Headers({ 'content-type': 'application/json', 'x-pourgate-cache': 'hit', age: String(Math.floor(hit.ageMs / 1000)) });
+      cacheKey = cache.key(scope, payload, `${privacy.pii}|${privacy.policy}`);
+      const serve = (hit: CachedResponse, kind: 'hit' | 'semantic', extra: Record<string, string> = {}): Response => {
+        const headers = new Headers({ 'content-type': 'application/json', 'x-pourgate-cache': kind, age: String(Math.floor(hit.ageMs / 1000)), ...extra });
         if (hit.provider) headers.set('x-pourgate-provider', hit.provider);
         if (hit.model) headers.set('x-pourgate-model', hit.model);
         if (hit.tier) headers.set('x-pourgate-tier', hit.tier);
         if (hit.complexity) headers.set('x-pourgate-complexity', hit.complexity);
         const hitRes = new Response(hit.body, { status: 200, headers });
         const ms = performance.now() - startedAt;
-        record({ routed: hitRes, totalMs: ms, ttfbMs: ms, tokens: null, error: null, cache: 'hit' });
+        record({ routed: hitRes, totalMs: ms, ttfbMs: ms, tokens: null, error: null, cache: kind });
         return tag(hitRes);
+      };
+      const hit = cache.get(cacheKey);
+      if (hit) return serve(hit, 'hit');
+      if (semantic) {
+        // Opt-in semantic cache: reuse the answer to a very similar prompt with an identical context.
+        const text = lastUserText(payload);
+        if (text.length >= 8) {
+          queryVec = await embedQuery(semantic.model, text.slice(0, 2000), privacy, c.req.raw.signal);
+          if (queryVec) {
+            context = contextHash(payload);
+            const match = semantic.index.find(scope, context, queryVec);
+            if (match) {
+              const similar = cache.get(match.key);
+              if (similar) return serve(similar, 'semantic', { 'x-pourgate-cache-similarity': match.similarity.toFixed(4) });
+              semantic.index.remove(match.key);
+            }
+          }
+        }
       }
     }
 
@@ -379,6 +425,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
                   tier: routed.headers.get('x-pourgate-tier'),
                   complexity: routed.headers.get('x-pourgate-complexity'),
                 });
+                if (semantic && queryVec && context) semantic.index.add(cacheKey, scope, context, queryVec);
               } catch (err) {
                 console.error('[cache] store failed:', err instanceof Error ? err.message : err);
               }
