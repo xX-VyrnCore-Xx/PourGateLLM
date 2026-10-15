@@ -33,14 +33,6 @@ models:
     quirks: []
     context: 131072
     verified_at: 2026-10-15
-  - id: Mistral-7B-Instruct-v0.3
-    tier: small
-    capabilities:
-      - chat
-    limits: *a1
-    quirks: []
-    context: 65536
-    verified_at: 2026-10-15
   - id: Mistral-Nemo-Instruct-2407
     tier: medium
     capabilities:

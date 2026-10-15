@@ -205,8 +205,8 @@ describe('admin key management', () => {
     expect((await post('groq', 123)).status).toBe(400);
   });
 
-  it('tests a key against {base_url}/models and reports only the status', async () => {
-    const upstream = vi.fn(async () => new Response('{"secret":"leak"}', { status: 401 }));
+  it('tests a key with a real tiny chat request and never returns the key', async () => {
+    const upstream = vi.fn(async () => new Response(`{"error":"Incorrect API key provided: ${KEY}"}`, { status: 401 }));
     const { app } = setup(upstream as unknown as typeof fetch);
     const c = await cookie(app);
     const rec = (await (
@@ -214,10 +214,24 @@ describe('admin key management', () => {
     ).json()) as { id: number };
     const res = await app.request(`/admin/api/provider-keys/${rec.id}/test`, { method: 'POST', headers: { cookie: c } });
     const text = await res.text();
-    expect(JSON.parse(text)).toEqual({ ok: false, status: 401 });
-    expect(text).not.toContain('leak');
+    expect(JSON.parse(text)).toMatchObject({ ok: false, status: 401, result: 'bad-key', model: 'm1' });
+    expect(text).not.toContain(KEY);
+    expect(text).toContain('[key]');
     const [url, init] = upstream.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('https://upstream.test/v1/models');
+    expect(url).toBe('https://upstream.test/v1/chat/completions');
     expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${KEY}`);
+    expect(JSON.parse(String(init.body))).toMatchObject({ model: 'm1', max_tokens: 32 });
+  });
+
+  it('reports a working key with the model and latency', async () => {
+    const upstream = vi.fn(async () => Response.json({ choices: [{ message: { role: 'assistant', content: 'pong' } }] }));
+    const { app } = setup(upstream as unknown as typeof fetch);
+    const c = await cookie(app);
+    const rec = (await (
+      await app.request('/admin/api/providers/groq/keys', { method: 'POST', headers: { ...json, cookie: c }, body: JSON.stringify({ key: KEY }) })
+    ).json()) as { id: number };
+    const ok = (await (await app.request(`/admin/api/provider-keys/${rec.id}/test`, { method: 'POST', headers: { cookie: c } })).json()) as Record<string, unknown>;
+    expect(ok).toMatchObject({ ok: true, status: 200, result: 'ok', model: 'm1', detail: 'pong' });
+    expect(typeof ok.ms).toBe('number');
   });
 });

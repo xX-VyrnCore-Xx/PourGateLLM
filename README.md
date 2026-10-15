@@ -93,7 +93,7 @@ Pick one. Each prints your dashboard password and API token on first run.
 | 🐳 **Docker** (published image) | `curl -fsSL https://raw.githubusercontent.com/xX-VyrnCore-Xx/PourGateLLM/main/install/install-docker.sh \| sh` |
 | 🐧🍎 **CLI**, Linux / macOS (Node ≥ 22.13) | `curl -fsSL https://raw.githubusercontent.com/xX-VyrnCore-Xx/PourGateLLM/main/install/install.sh \| sh` |
 | 🪟 **CLI**, Windows (Node ≥ 22.13) | `irm https://raw.githubusercontent.com/xX-VyrnCore-Xx/PourGateLLM/main/install/install.ps1 \| iex` |
-| 🪟 **Windows app** (experimental) | `.msi` / `.exe` attached to the [latest release](https://github.com/xX-VyrnCore-Xx/PourGateLLM/releases/latest), when present |
+| 🪟 **Windows app** (experimental) | `.msi` / `.exe` attached to the [latest release](https://github.com/xX-VyrnCore-Xx/PourGateLLM/releases/latest); step by step in [docs/INSTALL-WINDOWS.md](docs/INSTALL-WINDOWS.md) |
 | 🍎 **macOS app** (experimental, Apple Silicon) | `.dmg` attached to the latest release, when present. Not notarised: the first time, right-click the app → **Open**. Never run on a Mac by the author. |
 | 📱 **Phone / tablet** | Open the dashboard in the browser and choose *Add to Home Screen* / *Install app* (a PWA: no store, no app to maintain). Browsers only offer it on `localhost` or **https**, so put the gateway behind a reverse proxy or a tunnel (Tailscale, Cloudflare Tunnel) when you reach it from a phone. |
 
@@ -294,7 +294,7 @@ Other MCP clients: URL `http://localhost:3000/mcp`, header `Authorization: Beare
 
 ## 🆓 Providers that need no key
 
-Providers marked `keyless: true` in the registry work out of the box: **Kilo** (anonymous free routes, prompts may be logged for training: the privacy policy `no-training` excludes it) and **OVHcloud AI Endpoints** (anonymous tier, about 2 requests/minute per IP, unmeasured). The gateway sends no `Authorization` header to them. Adding a real key later replaces the anonymous slot and usually lifts the limits. Verified on 2026-10-15 with a real request through the gateway to each of them.
+Providers marked `keyless: true` in the registry work out of the box, with **no account at all**: **Kilo** (anonymous free routes; prompts may be logged for training, so the privacy policy `no-training` excludes it), **OVHcloud AI Endpoints** (anonymous tier, strict per-IP limits), **LLM7** (its free "turbo" models) and **Pollinations** (one anonymous text model). That is 30 models. The gateway sends no `Authorization` header to them (a made-up bearer token is rejected, Kilo answers `INVALID_TOKEN`). Adding a real key later replaces the anonymous slot and usually lifts the limits. All four were verified with real requests on 2026-10-15; see [docs/PROVIDERS.md](docs/PROVIDERS.md) for what is verified, what is not, and how many tokens per month to expect.
 
 ## 🔌 Your own endpoints and many keys
 
