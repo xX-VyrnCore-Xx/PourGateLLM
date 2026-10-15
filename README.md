@@ -423,7 +423,7 @@ Found a vulnerability? Please report it privately, see [SECURITY.md](SECURITY.md
 - [x] Embeddings endpoint
 - [x] Anthropic Messages endpoint
 - [x] Audio transcription, speech and image generation endpoints (pass-through)
-- [ ] Desktop app
+- [ ] Desktop app — experimental Tauri scaffold in `packages/desktop` (untested, see its README)
 
 See [DESIGN.md](DESIGN.md) for the full vision, architecture and open questions.
 

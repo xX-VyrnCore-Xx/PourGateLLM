@@ -6,3 +6,5 @@ dist
 .env.*
 !.env.example
 data/
+packages/desktop/src-tauri/server/
+packages/desktop/src-tauri/target/

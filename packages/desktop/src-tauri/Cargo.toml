@@ -1,0 +1,13 @@
+[package]
+name = "pourgate-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "Desktop wrapper for the PourGateLLM gateway"
+license = "MIT"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+uuid = { version = "1", features = ["v4"] }
