@@ -26,18 +26,21 @@ export function App() {
   if (auth === 'out') return <Login onLogin={() => setAuth('in')} />;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">{t('appName')}</h1>
-        <nav className="flex gap-1" aria-label="Main">
+    <div className="mx-auto max-w-5xl px-4 pb-10">
+      <header className="sticky top-0 z-10 -mx-4 mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-neutral-50/80 px-4 py-3 backdrop-blur dark:bg-neutral-950/70">
+        <h1 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+          <img src="/logo.svg" alt="" className="h-7 w-7" />
+          {t('appName')}
+        </h1>
+        <nav className="flex gap-1 rounded-xl border border-border bg-white/70 p-1 dark:bg-neutral-900/60" aria-label="Main">
           {(['tokens', 'providers', 'analytics'] as const).map((k) => (
             <button
               key={k}
               onClick={() => setTab(k)}
               aria-current={tab === k ? 'page' : undefined}
               className={cn(
-                'rounded-md px-3 py-1.5 text-sm',
-                tab === k ? 'bg-accent text-white' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800',
+                'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                tab === k ? 'bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-sm' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800',
               )}
             >
               {t(k)}

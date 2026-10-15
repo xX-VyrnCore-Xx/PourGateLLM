@@ -14,4 +14,16 @@
   }
 }
 
-body { @apply bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 antialiased; }
+body {
+  @apply bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 antialiased;
+  background-image:
+    radial-gradient(60rem 30rem at 10% -10%, oklch(0.55 0.2 265 / 0.12), transparent),
+    radial-gradient(50rem 28rem at 100% 0%, oklch(0.6 0.22 310 / 0.1), transparent);
+  background-attachment: fixed;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+::selection { background: oklch(0.55 0.2 265 / 0.3); }
+@media (prefers-reduced-motion: no-preference) {
+  main, section { animation: fade-in 0.25s ease-out; }
+  @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+}

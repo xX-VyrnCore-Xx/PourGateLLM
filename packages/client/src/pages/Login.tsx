@@ -28,7 +28,10 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   return (
     <main className="mx-auto mt-24 max-w-sm px-4">
       <Card>
-        <h1 className="mb-4 text-lg font-semibold">{t('appName')}</h1>
+        <div className="mb-5 flex flex-col items-center gap-2">
+          <img src="/logo.svg" alt="" className="h-14 w-14" />
+          <h1 className="text-lg font-semibold tracking-tight">{t('appName')}</h1>
+        </div>
         <form onSubmit={submit} className="space-y-3">
           <label className="block text-sm">
             {t('password')}

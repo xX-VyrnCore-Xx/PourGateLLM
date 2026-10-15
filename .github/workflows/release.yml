@@ -1,0 +1,82 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Bundle
+        run: |
+          set -e
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist-release/pourgatellm
+          cp -r packages/server/dist dist-release/pourgatellm/dist
+          cp -r packages/client/dist dist-release/pourgatellm/public
+          cp -r registry evals examples docs dist-release/pourgatellm/
+          cp README.md LICENSE .env.example dist-release/pourgatellm/
+          tar -czf "pourgatellm-${VERSION}.tar.gz" -C dist-release pourgatellm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle
+          path: pourgatellm-*.tar.gz
+
+  image:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    needs: [verify, image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundle
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" pourgatellm-*.tar.gz \
+            --title "PourGateLLM $GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
