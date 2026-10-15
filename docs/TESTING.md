@@ -1,5 +1,7 @@
 # Testing PourGateLLM
 
+Looking for the complete list of things to check (installers, API, routing, cache, security, uninstall…)? See [TEST-CHECKLIST.md](TEST-CHECKLIST.md).
+
 Four levels, from "no setup" to "real providers". Each one tells you something different.
 
 | Level | What it proves | Needs |
