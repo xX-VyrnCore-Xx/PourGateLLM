@@ -53,12 +53,12 @@ PourGateLLM sits in front of them and gives your apps **one stable `/v1` endpoin
 | 🔀 **Anthropic Messages API** | `POST /v1/messages` (streaming, tools, images) so the Anthropic SDKs and tools that speak that API can use the pool. `claude-*` model names map to tiers. |
 | 🧠 **Complexity routing** | `"model": "auto"` classifies each prompt (size, code, reasoning, tools…) and tries small, fast models for easy questions and the strongest ones for hard tasks, with automatic fallback to the other tiers. |
 | 🔁 **Smart failover** | On `429` / `5xx` / network errors it rotates to the next key, then the next model, honoring `Retry-After`. |
-| 📊 **Real quota accounting** | `rpm`, `rpd`, `tpm`, `tpd` enforced per key *and* model. Daily counters and cooldowns persist in SQLite. |
+| 📊 **Real quota accounting** | `rpm`, `rpd`, `tpm`, `tpd` enforced per key *and* model. Daily counters and cooldowns persist in SQLite, and providers' own `x-ratelimit-*` headers rest exhausted keys early and flag outdated registry limits. |
 | 🔑 **Per-client tokens** | Create tokens with their own rate limit, daily quota and expiry. Stored as SHA-256 hashes, revocable any time. |
 | 🎯 **Measured model quality** | Periodic mini-benchmarks (deterministic checks, ~24 tasks) score every model on quality, reliability and latency; routing can prefer the proven ones (`quality`, `speed`, `balanced`). |
-| ⚡ **Response cache** | Opt-in exact-match cache for repeatable requests (temperature 0 or a seed): repeated prompts cost no provider quota. Scoped per client, bypassable per request. |
+| ⚡ **Response cache** | Opt-in exact-match cache for repeatable requests (temperature 0 or a seed), plus an optional semantic cache for near-identical prompts. Scoped per client, bypassable per request. |
 | 🛡️ **Privacy controls** | Mask emails, phones, cards, IBANs, tax ids and secrets before prompts leave the gateway, and exclude providers that train on prompts. Clients can tighten (never loosen) per request. |
-| 📈 **Analytics & metrics** | Request log (metadata only, never prompts), dashboard analytics (volume, errors, p50/p95 latency, tokens per model), JSONL export and a Prometheus `/metrics` endpoint. |
+| 📈 **Analytics & observability** | Request log (metadata only, never prompts), dashboard analytics (volume, errors, p50/p95 latency, tokens per model), JSONL export, a Prometheus `/metrics` endpoint and OpenTelemetry traces. |
 | 🖥️ **Dashboard** | React + Tailwind UI in light and dark mode (English, Italian): manage tokens and provider keys, test keys, watch usage. |
 | 🗂️ **Open model registry** | YAML catalog with local overrides and optional signed, auto-syncing bundles. |
 | 🔐 **Encrypted provider keys** | AES-256-GCM in SQLite, bound to the provider; the UI only ever shows the last 4 characters. |
