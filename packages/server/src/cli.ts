@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openDatabase } from './db.js';
 import { backup, check, maintain, stats } from './dbtools.js';
+import { runDoctor, symbol } from './doctor.js';
 import { loadRegistry } from './registry.js';
 import { buildBundle, generateSigningKeys, signBundle } from './registry-sync.js';
 import { TokenStore } from './tokens.js';
@@ -18,6 +19,7 @@ function usage(): never {
   cli tokens revoke <id>
   cli registry bundle [--dir registry] --out <file> [--version <n>] [--sign <private.pem>]
   cli registry keygen --out-dir <dir>
+  cli doctor [--live] [--url http://localhost:3000] [--token <token>]
   cli db stats | check | optimize
   cli db backup --out <file>`);
   process.exit(2);
@@ -35,7 +37,22 @@ const positiveInt = (v: string | undefined, flag: string): number | undefined =>
 
 const dbPath = () => resolve(process.env.POURGATE_DB ?? 'data/pourgate.db');
 
-if (group === 'db') {
+if (group === 'doctor') {
+  const { values } = parseArgs({ args: process.argv.slice(3), options: { live: { type: 'boolean' }, url: { type: 'string' }, token: { type: 'string' } } });
+  const checks = await runDoctor({
+    env: process.env,
+    dbPath: dbPath(),
+    registryDir: resolve(process.env.POURGATE_REGISTRY_DIR ?? 'registry'),
+    live: values.live,
+    url: values.url,
+    token: values.token,
+  });
+  for (const c of checks) console.log(`${symbol(c.level)} ${c.name.padEnd(18)} ${c.detail}`);
+  const fails = checks.filter((c) => c.level === 'fail').length;
+  const warns = checks.filter((c) => c.level === 'warn').length;
+  console.log(fails ? `\n${fails} problem(s) to fix${warns ? `, ${warns} warning(s)` : ''}.` : warns ? `\nNo problems, ${warns} warning(s).` : '\nAll good.');
+  process.exitCode = fails ? 1 : 0;
+} else if (group === 'db') {
   const db = openDatabase(dbPath());
   if (action === 'stats') {
     const s = stats(db, dbPath());

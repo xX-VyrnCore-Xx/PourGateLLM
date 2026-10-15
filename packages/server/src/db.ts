@@ -124,6 +124,14 @@ const MIGRATIONS: string[] = [
    ALTER TABLE provider_keys ADD COLUMN weight INTEGER NOT NULL DEFAULT 1;`,
 ];
 
+/** Number of schema migrations; a database reporting this user_version is up to date. */
+export const SCHEMA_VERSION = MIGRATIONS.length;
+
+/** Opens an existing database without creating, migrating or backing anything up. */
+export function openReadOnly(path: string): DatabaseSync {
+  return new DatabaseSync(path, { readOnly: true });
+}
+
 export function openDatabase(path: string): DatabaseSync {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
