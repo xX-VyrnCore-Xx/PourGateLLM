@@ -143,7 +143,7 @@ export const api = {
   deleteProfile: (name: string) => request<void>(`/profiles/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   removeProviderKey: (id: number) => request<void>(`/provider-keys/${id}`, { method: 'DELETE' }),
   testProviderKey: (id: number) =>
-    request<{ ok: boolean; status: number | null }>(`/provider-keys/${id}/test`, { method: 'POST' }),
+    request<{ ok: boolean; status: number | null; result?: string; model?: string | null; ms?: number | null; detail?: string | null }>(`/provider-keys/${id}/test`, { method: 'POST' }),
   evals: () => request<EvalInfo>('/evals'),
   runEvals: () => request<{ started: boolean }>('/evals/run', { method: 'POST', body: '{}' }),
   cache: () =>

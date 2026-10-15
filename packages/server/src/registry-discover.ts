@@ -17,6 +17,10 @@ export interface DiscoverySource {
   keyless?: boolean;
   /** Limits applied to every discovered model when the provider documents one for its free tier. */
   limits?: ModelEntry['limits'];
+  /** Where the model list lives when it is not `{base_url}/models`; a bare array or `{data: []}`; ids may be in `name`. */
+  listUrl?: string;
+  /** Ids the provider lists but does not route (found with `registry verify --all-models`). */
+  skip?: string[];
   /** Decides from one raw `/models` row whether the model is free. */
   isFree: (row: Row) => boolean;
 }
@@ -52,7 +56,27 @@ export const SOURCES: DiscoverySource[] = [
     signup_url: 'https://endpoints.ai.cloud.ovh.net',
     keyless: true,
     limits: { rpm: 2 },
+    skip: ['Mistral-7B-Instruct-v0.3'], // listed by /models, answers "no Route matched" (checked 2026-10-15)
     isFree: (r) => (r.context_length as number | undefined) !== 0 && zero((r.pricing as Record<string, unknown> | undefined)?.request) && num((r.max_completion_tokens as unknown)) !== 0,
+  },
+  {
+    // Anonymous "turbo" models answer without a key (verified with real requests on 2026-10-15); "pro" models are pay-per-use.
+    provider: 'llm7',
+    base_url: 'https://api.llm7.io/v1',
+    api_key_env: 'LLM7_API_KEYS',
+    signup_url: 'https://llm7.io',
+    keyless: true,
+    isFree: (r) => r.model_type === 'chat' && r.tier === 'turbo' && r.usage_based_only === false,
+  },
+  {
+    // Pollinations' anonymous text tier; its list is a bare array keyed by `name`.
+    provider: 'pollinations',
+    base_url: 'https://text.pollinations.ai/v1',
+    listUrl: 'https://text.pollinations.ai/models',
+    api_key_env: 'POLLINATIONS_API_KEYS',
+    signup_url: 'https://pollinations.ai',
+    keyless: true,
+    isFree: (r) => r.tier === 'anonymous' && r.community !== true && !r.id.match(/image|video|audio/i),
   },
   {
     provider: 'routeway',
@@ -143,17 +167,19 @@ export async function discover(opts: { only?: string; fetch?: Fetcher; env?: Nod
     const timer = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 20_000);
     try {
       const key = env[source.api_key_env]?.split(',')[0]?.trim();
-      const res = await doFetch(`${source.base_url}/models`, { signal: ctl.signal, headers: key ? { authorization: `Bearer ${key}` } : {} });
+      const res = await doFetch(source.listUrl ?? `${source.base_url}/models`, { signal: ctl.signal, headers: key ? { authorization: `Bearer ${key}` } : {} });
       if (!res.ok) {
         out.push({ source, error: `HTTP ${res.status}` });
         continue;
       }
-      const body = (await res.json()) as { data?: unknown };
-      const rows = Array.isArray(body?.data) ? (body.data as Row[]) : [];
+      const body = (await res.json()) as { data?: unknown } | unknown[];
+      const raw = Array.isArray(body) ? body : Array.isArray((body as { data?: unknown })?.data) ? ((body as { data: unknown[] }).data) : [];
+      // Some providers name the id `name`.
+      const rows = raw.map((r) => (r && typeof r === 'object' && typeof (r as Row).id !== 'string' && typeof (r as { name?: unknown }).name === 'string' ? { ...(r as object), id: (r as { name: string }).name } : r)) as Row[];
       const models: ModelEntry[] = [];
       const seen = new Set<string>();
       for (const row of rows) {
-        if (typeof row?.id !== 'string' || seen.has(row.id) || !source.isFree(row)) continue;
+        if (typeof row?.id !== 'string' || seen.has(row.id) || source.skip?.includes(row.id) || !source.isFree(row)) continue;
         const m = toModel(row);
         if (!m) continue;
         seen.add(row.id);

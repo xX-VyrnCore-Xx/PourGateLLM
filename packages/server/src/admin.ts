@@ -8,6 +8,7 @@ import type { Breaker } from './breaker.js';
 import type { LatencyTracker } from './latency.js';
 import { KeyStoreError, MAX_KEYS_PER_PROVIDER, type KeyStore } from './keys.js';
 import type { Profiles } from './profiles.js';
+import { probeProvider } from './registry-verify.js';
 import { CustomProviderError, detectModels, envNameFor, type CustomProviders } from './customproviders.js';
 import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
@@ -485,7 +486,7 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     return c.body(null, 204);
   });
 
-  // Cheap liveness check: GET {base_url}/models with the key. Only the HTTP status is reported back.
+  // Real check: one tiny chat request with this key (GET /models is answered for any key by several providers).
   const testLimiter = new SlidingWindow(60_000, now);
   app.post('/provider-keys/:id/test', async (c) => {
     if (!keyAdminReady()) return c.json({ error: 'key management is not configured' }, 404);
@@ -493,16 +494,9 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     const secret = opts.keyStore!.secretById(Number(c.req.param('id')));
     const entry = secret && providerByName(secret.provider);
     if (!secret || !entry) return c.json({ error: 'not found' }, 404);
-    try {
-      const res = await (opts.fetch ?? fetch)(`${entry.base_url.replace(/\/$/, '')}/models`, {
-        headers: { authorization: `Bearer ${secret.key}` },
-        signal: AbortSignal.timeout(10_000),
-      });
-      await res.body?.cancel();
-      return c.json({ ok: res.ok, status: res.status });
-    } catch {
-      return c.json({ ok: false, status: null });
-    }
+    const r = await probeProvider(entry, secret.key, { fetch: opts.fetch as never, timeoutMs: 25_000 });
+    // A rate-limited answer still proves the key is accepted.
+    return c.json({ ok: r.status === 'ok' || r.status === 'rate-limited', status: r.httpStatus ?? null, result: r.status, model: r.model ?? null, ms: r.ms ?? null, detail: r.detail ?? null });
   });
 
   app.get('/providers', (c) =>

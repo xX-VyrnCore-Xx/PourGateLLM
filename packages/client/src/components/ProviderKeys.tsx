@@ -87,7 +87,7 @@ export function ProviderKeys({ provider, onChanged, onUnauthorized }: Props) {
   async function test(id: number) {
     try {
       const r = await api.testProviderKey(id);
-      setResults((prev) => ({ ...prev, [id]: r.ok ? t('testOk') : `${t('testFail')}${r.status ? ` (${r.status})` : ''}` }));
+      setResults((prev) => ({ ...prev, [id]: r.ok ? `${t('testOk')}${r.model ? ` · ${r.model}` : ''}${r.ms ? ` · ${r.ms} ms` : ''}${r.result === 'rate-limited' ? ' · rate-limited' : ''}` : `${t('testFail')}${r.status ? ` (${r.status})` : ''}${r.detail ? `: ${r.detail.slice(0, 80)}` : ''}` }));
     } catch (err) {
       fail(err);
     }

@@ -11,6 +11,7 @@ import { createInterface } from 'node:readline/promises';
 import { runDoctor, symbol } from './doctor.js';
 import { loadRegistry } from './registry.js';
 import { checkRegistry } from './registry-check.js';
+import { verifyRegistry } from './registry-verify.js';
 import { discover } from './registry-discover.js';
 import { stringify } from 'yaml';
 import { buildBundle, generateSigningKeys, signBundle } from './registry-sync.js';
@@ -28,6 +29,7 @@ function usage(): never {
   cli registry bundle [--dir registry] --out <file> [--version <n>] [--sign <private.pem>]
   cli registry keygen --out-dir <dir>
   cli registry discover [--provider <name>] [--write]   (list/refresh the free models each provider advertises)
+  cli registry verify [--provider <name>] [--all-models]   (send tiny real chat requests with your keys; --all-models tests every model)
   cli registry check [--provider <name>]   (compare model ids with each provider's live /models list)
   cli setup [--provider <name> --key <key>]...
   cli service install | uninstall | status | print
@@ -229,6 +231,14 @@ if (group === 'setup') {
         console.log(`  wrote ${d.source.provider}.yaml`);
       }
     }
+  } else if (action === 'verify') {
+    const { values } = parseArgs({ args: rest, options: { provider: { type: 'string' }, 'all-models': { type: 'boolean' } } });
+    const results = await verifyRegistry(loadRegistryForCli(), { only: values.provider, allModels: values['all-models'] });
+    const mark = { ok: '✓', 'bad-key': '✗', 'rate-limited': '~', 'model-unavailable': '✗', 'server-error': '✗', unreachable: '!', 'no-key': '–' } as const;
+    for (const r of results) console.log(`${mark[r.status]} ${r.provider.padEnd(11)} ${r.status}${r.model ? ` (${r.model}${r.ms !== undefined ? `, ${r.ms} ms` : ''})` : ''}${r.detail ? ` — ${r.detail}` : ''}`);
+    const ok = results.filter((r) => r.status === 'ok').length;
+    console.log(`\n${ok} of ${results.length} providers answered. "no-key" providers need a key (their key page is in the dashboard).`);
+    if (results.some((r) => ['bad-key', 'model-unavailable', 'server-error'].includes(r.status))) process.exitCode = 1;
   } else if (action === 'check') {
     const { values } = parseArgs({ args: rest, options: { provider: { type: 'string' } } });
     const results = await checkRegistry(loadRegistryForCli(), { only: values.provider });
