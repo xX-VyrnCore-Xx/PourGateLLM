@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Desktop release workflow stamps the release version into the app so installer names match.
+
+## 0.1.1
+
 - Installers: `install/install.sh`, `install/install.ps1`, `install/install-docker.sh` and a `pourgate` launcher (`bin/pourgate.mjs`) shipped in the release tarball.
 - Windows installer build (`desktop-release.yml`, experimental).
 
