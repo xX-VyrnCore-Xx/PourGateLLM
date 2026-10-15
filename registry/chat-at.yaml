@@ -1,0 +1,17 @@
+# ch.at: a public, anonymous, OpenAI-compatible chat endpoint. It ignores the `model`
+# field (it always answers with its own backing model) and publishes no model list or limits,
+# so it is registered as one small fallback model. Verified 2026-10-15 with real requests
+# (plain + streaming, 6/6 consecutive answers). Hobby service: no SLA, keep it low in the order.
+provider: chat-at
+base_url: https://ch.at/v1
+api_key_env: CHAT_AT_API_KEYS
+auth: bearer
+signup_url: https://ch.at
+keyless: true
+models:
+  - id: ch-at
+    tier: small
+    capabilities: [chat]
+    limits: {}
+    quirks: []
+    verified_at: 2026-10-15
