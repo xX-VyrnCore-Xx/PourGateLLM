@@ -24,7 +24,7 @@ interface Row {
   weight: number;
 }
 
-export const MAX_KEYS_PER_PROVIDER = 50;
+export const MAX_KEYS_PER_PROVIDER = 500;
 const toRecord = (r: Row): ProviderKeyRecord => ({
   id: r.id,
   provider: r.provider,

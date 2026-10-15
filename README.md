@@ -460,6 +460,8 @@ models:
 
 **Contributing a fix?** Edit the file under [`registry/`](registry) and open a PR. CI validates the schema.
 
+**More free models?** `pnpm cli registry discover --write` asks providers that publish prices or a free flag (OpenRouter, Kilo, Routeway, OrcaRouter, BazaarLink, Requesty, xKiro) for the models they mark as free and rewrites their registry files; limits stay empty and are learned from the provider's headers. Each provider needs its own key (see the Providers page for links). How this compares with FreeLLMAPI, including its "7.4B tokens/month" claim: [docs/FREELLMAPI-COMPARISON.md](docs/FREELLMAPI-COMPARISON.md). PourGateLLM has no token ceiling of its own: capacity is the sum of your keys' free quotas, with up to 500 keys per provider.
+
 **Is the registry still accurate?** `pnpm cli registry check` asks each provider for its live `/models` list and reports ids that disappeared (it uses your `*_API_KEYS` for providers that require one). A weekly workflow does the same for the public ones.
 
 **Following a published bundle?** Build one and point gateways at it:
