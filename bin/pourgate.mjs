@@ -117,7 +117,7 @@ if (!existsSync(envFile)) {
   const token = `pg-${randomBytes(24).toString('base64url')}`;
   writeFileSync(
     envFile,
-    `# PourGateLLM configuration. Add provider keys, then restart. See the README for all options.\nPOURGATE_ADMIN_PASSWORD=${password}\nPOURGATE_TOKENS=${token}\nPORT=3000\n# GROQ_API_KEYS=\n# GEMINI_API_KEYS=\n# CEREBRAS_API_KEYS=\n# MISTRAL_API_KEYS=\n# OPENROUTER_API_KEYS=\n`,
+    `# PourGateLLM configuration. Add provider keys, then restart. See the README for all options.\nPOURGATE_ADMIN_PASSWORD=${password}\nPOURGATE_TOKENS=${token}\nPORT=3000\n# Listens on this machine only. Use 0.0.0.0 to accept other machines (then add HTTPS and a firewall).\n# POURGATE_HOST=127.0.0.1\n# GROQ_API_KEYS=\n# GEMINI_API_KEYS=\n# CEREBRAS_API_KEYS=\n# MISTRAL_API_KEYS=\n# OPENROUTER_API_KEYS=\n`,
     { mode: 0o600 },
   );
   console.log(`${c('1;35', 'Welcome to PourGateLLM!')} First run: created ${envFile}\n  dashboard password: ${c('1', password)}\n  API token:          ${c('1', token)}\n  Next: run ${c('1', 'pourgate setup')} to add your provider API keys.\n`);

@@ -8,6 +8,7 @@ RUN pnpm install --frozen-lockfile && pnpm build
 FROM node:22-slim
 ENV NODE_ENV=production \
     PORT=3000 \
+    POURGATE_HOST=0.0.0.0 \
     POURGATE_DB=/app/data/pourgate.db
 WORKDIR /app
 COPY --from=build /app/packages/server/dist ./dist

@@ -30,6 +30,20 @@ echo "Downloading PourGateLLM $VERSION..."
 curl -fsSL "https://github.com/$REPO/releases/download/v$VERSION/pourgatellm-$VERSION.tar.gz" -o "$tmp/pg.tar.gz" \
   || die "download failed (does release v$VERSION have a tarball?)"
 
+# Verify the download against the checksum published with the release (older releases have none).
+if curl -fsSL "https://github.com/$REPO/releases/download/v$VERSION/SHA256SUMS" -o "$tmp/SHA256SUMS" 2>/dev/null; then
+  expected=$(grep "  pourgatellm-$VERSION.tar.gz\$" "$tmp/SHA256SUMS" | awk '{print $1}')
+  if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$tmp/pg.tar.gz" | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$tmp/pg.tar.gz" | awk '{print $1}')
+  else actual=""; fi
+  [ -n "$expected" ] || die "SHA256SUMS does not list pourgatellm-$VERSION.tar.gz"
+  [ -n "$actual" ] || die "no sha256sum/shasum available to verify the download"
+  [ "$expected" = "$actual" ] || die "checksum mismatch: the download is corrupt or has been tampered with"
+  echo "Checksum verified."
+else
+  echo "Note: this release publishes no checksum file; skipping verification."
+fi
+
 # Replace the application; data and config in $HOME_DIR/data and config.env are kept.
 if [ -f "$HOME_DIR/app/VERSION" ]; then echo "Updating from $(cat "$HOME_DIR/app/VERSION")..."; fi
 mkdir -p "$HOME_DIR" "$BIN_DIR"

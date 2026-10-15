@@ -1,0 +1,52 @@
+name: Prune old releases
+# Keeps the newest releases (default 3: the latest plus the two before it) and deletes older ones together
+# with their files, so the Releases page never fills up. Git tags and the source history are kept.
+# Runs after every release, weekly, and on demand (use dry_run to see what would go).
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: 'How many of the newest releases to keep'
+        default: '3'
+      dry_run:
+        description: 'Only list what would be deleted'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prune-releases
+
+jobs:
+  prune:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete releases beyond the newest few
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP: ${{ inputs.keep }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          keep="${KEEP:-3}"
+          case "$keep" in ''|*[!0-9]*) echo "keep must be a whole number" >&2; exit 1;; esac
+          [ "$keep" -ge 1 ] || { echo "keep must be at least 1" >&2; exit 1; }
+
+          # Published releases with plain vX.Y.Z tags (drafts and pre-releases such as -rc are never touched),
+          # newest version first.
+          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 300 --exclude-drafts --exclude-pre-releases \
+                   --json tagName --jq '.[].tagName' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -Vr || true)
+          echo "Releases, newest first:"; echo "$tags"
+          old=$(echo "$tags" | tail -n +"$((keep + 1))" | sed '/^$/d' || true)
+          if [ -z "$old" ]; then echo "Nothing to delete (keeping $keep)."; exit 0; fi
+          for t in $old; do
+            if [ "${DRY_RUN:-false}" = "true" ]; then echo "Would delete $t"; else echo "Deleting $t"; gh release delete "$t" --repo "$GITHUB_REPOSITORY" --yes; fi
+          done

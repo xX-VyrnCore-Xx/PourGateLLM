@@ -1,0 +1,46 @@
+# Keeps dependencies current. Minor and patch updates arrive as one grouped pull request per ecosystem and
+# are merged automatically once CI is green (see workflows/dependabot-automerge.yml); major updates and the
+# desktop app's Rust crates always wait for a human. Security updates are opened immediately by GitHub.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories: ['/', '/packages/*']
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: 'deps'
+    groups:
+      npm-minor-patch:
+        update-types: ['minor', 'patch']
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'ci'
+    groups:
+      actions-minor-patch:
+        update-types: ['minor', 'patch']
+
+  - package-ecosystem: docker
+    directory: '/'
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'docker'
+    ignore:
+      # The runtime needs Node 22.13+ with node:sqlite; moving to another major is a deliberate decision.
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: cargo
+    directory: '/packages/desktop/src-tauri'
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'desktop'
+    groups:
+      cargo-minor-patch:
+        update-types: ['minor', 'patch']

@@ -8,8 +8,15 @@ services:
     env_file: .env
     environment:
       PORT: 3000
+    # Published on this machine only. To reach it from other machines set POURGATE_BIND=0.0.0.0 (and put HTTPS in front).
     ports:
-      - "${PORT:-3000}:3000"
+      - "${POURGATE_BIND:-127.0.0.1}:${PORT:-3000}:3000"
+    # Hardening: no extra privileges, no Linux capabilities (the app needs none).
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Stricter still (untested here): read_only: true plus tmpfs: [/tmp]
     volumes:
       - pourgate-data:/app/data
 volumes:

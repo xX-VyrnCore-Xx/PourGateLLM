@@ -9,12 +9,16 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -47,4 +51,11 @@ jobs:
           for f in msi/*.msi nsis/*.exe; do
             cp "$f" "PourGateLLM-${VERSION}-windows-$(basename "$f")"
           done
-          gh release upload "v$VERSION" PourGateLLM-*.msi PourGateLLM-*.exe --clobber --repo "$GITHUB_REPOSITORY"
+          sha256sum PourGateLLM-*.msi PourGateLLM-*.exe > SHA256SUMS-windows-app.txt
+          gh release upload "v$VERSION" PourGateLLM-*.msi PourGateLLM-*.exe SHA256SUMS-windows-app.txt --clobber --repo "$GITHUB_REPOSITORY"
+      - name: Attest the installers build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            packages/desktop/src-tauri/target/release/bundle/PourGateLLM-*.msi
+            packages/desktop/src-tauri/target/release/bundle/PourGateLLM-*.exe
