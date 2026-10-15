@@ -2,27 +2,104 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PourGateLLM</title>
     <style>
-      body { margin: 0; height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif;
-             background: linear-gradient(135deg, #6366f1, #a855f7); color: #fff; }
-      p { opacity: .85 }
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
+        font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #fff;
+        background: radial-gradient(60rem 40rem at 20% -10%, #818cf8 0%, transparent 60%),
+                    radial-gradient(50rem 36rem at 100% 0%, #c084fc 0%, transparent 55%), linear-gradient(135deg, #4f46e5, #7e22ce);
+      }
+      main { width: min(520px, 100%); text-align: center; }
+      .logo { width: 84px; height: 84px; filter: drop-shadow(0 8px 24px rgba(0,0,0,.25)); }
+      h1 { margin: 12px 0 4px; font-size: 28px; letter-spacing: -0.02em; }
+      p { margin: 0; opacity: .9; }
+      .spin { margin: 22px auto 0; width: 28px; height: 28px; border: 3px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: s 0.9s linear infinite; }
+      @keyframes s { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } }
+      .card { margin-top: 22px; padding: 18px; text-align: left; border-radius: 16px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.28); backdrop-filter: blur(8px); }
+      .card h2 { margin: 0 0 4px; font-size: 16px; }
+      .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+      .row label { width: 92px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; opacity: .8; }
+      code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 8px; border-radius: 8px; background: rgba(0,0,0,.28); font: 12px ui-monospace, Consolas, monospace; }
+      button { cursor: pointer; border: 0; border-radius: 10px; padding: 8px 14px; font: inherit; font-weight: 600; }
+      .ghost { background: rgba(255,255,255,.2); color: #fff; padding: 5px 10px; font-size: 12px; }
+      .primary { margin-top: 16px; width: 100%; background: #fff; color: #4338ca; }
+      .primary:hover { background: #eef2ff; }
+      .hint { margin-top: 12px; font-size: 12px; opacity: .85; }
+      .err { background: rgba(127,29,29,.55); border-color: rgba(254,202,202,.5); }
+      [hidden] { display: none !important; }
     </style>
   </head>
   <body>
-    <div style="text-align:center">
+    <main>
+      <svg class="logo" viewBox="0 0 128 128" role="img" aria-label="PourGateLLM">
+        <rect width="128" height="128" rx="28" fill="#fff" opacity=".18" />
+        <circle cx="34" cy="26" r="6" fill="#fff" /><circle cx="64" cy="20" r="6" fill="#fff" /><circle cx="94" cy="26" r="6" fill="#fff" />
+        <path d="M22 44h84L74 78v22a6 6 0 0 1-6 6h-8a6 6 0 0 1-6-6V78z" fill="#fff" />
+        <rect x="61" y="106" width="6" height="12" rx="3" fill="#fff" />
+      </svg>
       <h1>PourGateLLM</h1>
-      <p id="msg">Starting the gateway…</p>
-    </div>
+      <p id="msg"></p>
+      <div class="spin" id="spin" role="status" aria-live="polite"></div>
+
+      <section class="card" id="welcome" hidden>
+        <h2 id="wTitle"></h2>
+        <p id="wText"></p>
+        <div class="row"><label id="lPw"></label><code id="pw"></code><button class="ghost" data-copy="pw"></button></div>
+        <div class="row"><label id="lTok"></label><code id="tok"></code><button class="ghost" data-copy="tok"></button></div>
+        <p class="hint" id="wHint"></p>
+        <button class="primary" id="open"></button>
+      </section>
+
+      <section class="card err" id="fail" hidden>
+        <h2 id="fTitle"></h2>
+        <p id="fText"></p>
+        <p class="hint"><code id="logPath"></code></p>
+        <button class="primary" id="retry"></button>
+      </section>
+    </main>
+
     <script>
-      const url = 'http://127.0.0.1:43117';
+      const info = window.__PG__ || {};
+      const port = info.port || '43117';
+      const url = 'http://127.0.0.1:' + port;
+      const it = (navigator.language || '').toLowerCase().startsWith('it');
+      const L = it
+        ? { starting: 'Avvio del gateway…', wTitle: 'Benvenuto!', wText: 'Ecco le tue credenziali. Salvale ora: la password serve per accedere alla dashboard, il token per collegare le tue app.', pw: 'Password', tok: 'Token API', copy: 'Copia', copied: 'Copiato', wHint: 'Poi apri la dashboard e aggiungi la tua prima chiave API nella scheda Provider.', open: 'Apri la dashboard', fTitle: 'Il gateway non si è avviato', fText: 'Controlla il file di log qui sotto. Cause comuni: la porta è già in uso o un file di configurazione non valido.', retry: 'Riprova' }
+        : { starting: 'Starting the gateway…', wTitle: 'Welcome!', wText: 'Here are your credentials. Save them now: the password signs you in to the dashboard, the token connects your apps.', pw: 'Password', tok: 'API token', copy: 'Copy', copied: 'Copied', wHint: 'Then open the dashboard and add your first API key in the Providers tab.', open: 'Open the dashboard', fTitle: 'The gateway did not start', fText: 'Check the log file below. Common causes: the port is already in use, or an invalid settings file.', retry: 'Try again' };
+      document.documentElement.lang = it ? 'it' : 'en';
+      const $ = (id) => document.getElementById(id);
+      $('msg').textContent = L.starting;
+      $('wTitle').textContent = L.wTitle; $('wText').textContent = L.wText; $('lPw').textContent = L.pw; $('lTok').textContent = L.tok;
+      $('wHint').textContent = L.wHint; $('open').textContent = L.open; $('fTitle').textContent = L.fTitle; $('fText').textContent = L.fText; $('retry').textContent = L.retry;
+      $('logPath').textContent = info.logPath || '';
+      document.querySelectorAll('[data-copy]').forEach((b) => {
+        b.textContent = L.copy;
+        b.addEventListener('click', () => {
+          navigator.clipboard?.writeText($(b.dataset.copy).textContent).then(() => { b.textContent = L.copied; setTimeout(() => (b.textContent = L.copy), 1500); });
+        });
+      });
+      $('open').addEventListener('click', () => location.replace(url));
+      $('retry').addEventListener('click', () => location.reload());
+
       let tries = 0;
       (function poll() {
         // no-cors: we only need to know that the server accepts connections.
         fetch(url + '/health', { mode: 'no-cors' })
-          .then(() => location.replace(url))
+          .then(() => {
+            $('spin').hidden = true;
+            if (info.firstRun) {
+              $('msg').textContent = '';
+              $('pw').textContent = info.password; $('tok').textContent = info.token;
+              $('welcome').hidden = false;
+            } else location.replace(url);
+          })
           .catch(() => {
-            if (++tries > 60) document.getElementById('msg').textContent = 'The gateway did not start. Is Node 22.13+ installed?';
+            if (++tries > 60) { $('spin').hidden = true; $('msg').textContent = ''; $('fail').hidden = false; }
             else setTimeout(poll, 500);
           });
       })();

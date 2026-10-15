@@ -30,7 +30,8 @@ jobs:
           node -e "const f='packages/desktop/src-tauri/tauri.conf.json';const fs=require('fs');const c=JSON.parse(fs.readFileSync(f,'utf8'));c.version=process.env.VERSION;fs.writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: pnpm --filter @pourgate/desktop prepare:server
+      - name: Prepare the app with its own Node.js runtime
+        run: pnpm --filter @pourgate/desktop prepare:server:standalone
       - run: cargo install tauri-cli --version "^2" --locked
       - run: cargo tauri build
         working-directory: packages/desktop/src-tauri

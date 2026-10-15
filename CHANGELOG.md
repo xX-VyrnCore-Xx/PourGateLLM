@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Windows app: ships its own Node.js runtime (no prerequisites), hides the gateway console, writes `gateway.log`, shows a welcome screen with the generated credentials (EN/IT), current-user installer with English/Italian installer languages.
+
 - Dashboard: Overview tab (setup checklist, provider health, copy-paste connection snippets), light/dark/system theme switch, English/Italian language switch, "get a key" links.
 
 - `pourgate setup` (interactive and `--provider/--key`), `pourgate service install|uninstall|status|print` (systemd user unit, launchd, Windows scheduled task), `pourgate update [--check]`; colored help and a friendlier startup banner. Registry entries may carry a `signup_url` hint. Uninstallers also remove the service.
