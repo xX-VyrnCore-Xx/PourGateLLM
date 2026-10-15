@@ -47,6 +47,7 @@ export interface ProviderRow {
     limits: Record<string, number>;
     verifiedAt: string | null;
     usageToday: { requests: number; tokens: number };
+    observed: { limitRequests: number | null; limitTokens: number | null; observedAt: number; drift: string[] } | null;
   }[];
 }
 

@@ -161,9 +161,10 @@ export class KeyPool {
     return this._keys.filter((k) => (this.cooldownUntil.get(this.fp(k)) ?? 0) > t).length;
   }
 
+  /** Rests a key for `ms`. A longer cooldown already in place is never shortened. */
   cooldown(key: string, ms: number): void {
     const fp = this.fp(key);
-    const until = this.now() + ms;
+    const until = Math.max(this.now() + ms, this.cooldownUntil.get(fp) ?? 0);
     this.cooldownUntil.set(fp, until);
     this.backend.setCooldown(fp, until);
   }

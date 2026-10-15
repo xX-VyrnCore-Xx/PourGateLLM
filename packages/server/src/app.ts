@@ -11,6 +11,7 @@ import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
 import type { Metrics } from './metrics.js';
 import { PluginError, RejectedByPlugin, type PluginHost } from './plugins.js';
+import type { ObservedLimits } from './ratelimits.js';
 import { newSpanId, newTraceId, parseTraceparent, type Tracer } from './otel.js';
 import { DEFAULT_PRIVACY, tighten, type PrivacyConfig } from './privacy.js';
 import { observeResponse } from './observe.js';
@@ -44,6 +45,8 @@ export interface AppOptions {
   evals?: { runner: EvalRunner; store: EvalStore; strategy: Strategy; tasksPerModel: number; tasks: number };
   /** Largest accepted audio upload in bytes (default 25 MB). */
   maxUploadBytes?: number;
+  /** Limits reported by providers (from rate-limit headers). */
+  observedLimits?: ObservedLimits;
   /** Trusted plugins: request hooks, response observers and provider adapters. */
   plugins?: PluginHost;
   /** OTLP trace exporter; tracing is off when unset. */
@@ -340,6 +343,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         fetch: doFetch,
         privacy,
         scoring: opts.scoring,
+        observedLimits: opts.observedLimits,
         adapters: opts.plugins?.adapters,
         onAttempt: tracer
           ? (a) =>
@@ -440,6 +444,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         cache: opts.cache,
         evals: opts.evals,
         plugins: opts.plugins,
+        observedLimits: opts.observedLimits,
         fetch: opts.fetch,
         secureCookie: opts.secureCookie,
       }),

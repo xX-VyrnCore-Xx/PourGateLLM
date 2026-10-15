@@ -24,7 +24,7 @@
 | Principio | Come si traduce |
 |---|---|
 | Catalogo aperto | Registry in YAML nel repo (`registry/`), sync da bundle, PR della community, CI di validazione |
-| Dati verificabili | **Probing** (pianificato): il gateway rileva i limiti reali da header e 429 e segnala drift rispetto al registry |
+| Dati verificabili | **Probing** (implementato): il gateway legge gli header `x-ratelimit-*`, mette a riposo le chiavi con finestra esaurita e segnala il drift tra limiti dichiarati dal provider e registry |
 | Ranking basato su misure | **Eval periodiche** (pianificate): mini-benchmark per qualità, latenza, affidabilità per modello |
 | Multi-utente | Token per client con rate limit, quota giornaliera e scadenza; audit log (pianificato) |
 | Costo proporzionato alla richiesta | Routing per **complessità del prompt**: classificatore euristico a costo zero di quota (implementato) |

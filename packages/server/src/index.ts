@@ -14,6 +14,7 @@ import { Metrics } from './metrics.js';
 import { parsePiiMode, parsePolicy } from './privacy.js';
 import { Tracer, parseHeaders } from './otel.js';
 import { PluginHost } from './plugins.js';
+import { ObservedLimits } from './ratelimits.js';
 import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
 import { SqliteUsage, makeFingerprint, pruneUsage } from './usage.js';
@@ -152,6 +153,7 @@ serve(
       keyStore,
       poolManager,
       privacy,
+      observedLimits: new ObservedLimits(db),
       maxUploadBytes: Math.max(1, Number(process.env.POURGATE_MAX_UPLOAD_MB ?? 25)) * 1024 * 1024,
       plugins,
       tracer,

@@ -84,6 +84,13 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
                   {m.tier && <Badge>{m.tier}</Badge>}
                 </span>
                 <span className="text-xs text-muted">
+                  {m.observed && (
+                    <span title={m.observed.drift.join('\n') || undefined}>
+                      {t('reported')} {m.observed.limitRequests ?? '-'} req / {m.observed.limitTokens ?? '-'} tok
+                      {m.observed.drift.length > 0 && <span className="ml-1 text-amber-600 dark:text-amber-400">⚠ {t('drift')}</span>}
+                      {' · '}
+                    </span>
+                  )}
                   {m.usageToday.requests > 0 && `${m.usageToday.requests} req / ${m.usageToday.tokens} tok · `}
                   {m.limits.rpm ? `${m.limits.rpm} rpm` : ''}
                   {m.verifiedAt ? '' : ` ${t('unverified')}`}

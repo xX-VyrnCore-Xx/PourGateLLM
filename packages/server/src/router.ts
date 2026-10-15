@@ -2,6 +2,7 @@ import type { ModelEntry, ProviderEntry, Tier } from '@pourgate/shared';
 import { COMPLEXITY_TIER, TIER_ORDER, analyzePrompt, requiredCapabilities, type Analysis } from './complexity.js';
 import { rankScore, type ModelScore, type Strategy } from './evals.js';
 import { KeyPool } from './keypool.js';
+import { exhaustedFor, parseRateLimitHeaders, type ObservedLimits } from './ratelimits.js';
 import type { ProviderAdapter } from './plugins.js';
 import { DEFAULT_PRIVACY, needsRedaction, providerAllowed, redactBody, redactTextFields, type PrivacyConfig } from './privacy.js';
 
@@ -18,6 +19,8 @@ export interface RouterDeps {
   privacy?: PrivacyConfig;
   /** Measured model quality, used to order models inside a tier. */
   scoring?: Scoring;
+  /** Where limits reported by providers are remembered. */
+  observedLimits?: ObservedLimits;
   /** Plugin-provided adapters for non-OpenAI-compatible providers, by name. */
   adapters?: Map<string, ProviderAdapter>;
   /** Called after each upstream attempt (for tracing); never receives prompts. */
@@ -228,6 +231,12 @@ export async function routeChat(
         continue;
       }
       deps.onAttempt?.({ provider: provider.provider, model: model.id, startMs: attemptStart, endMs: attemptStart + (performance.now() - attemptT0), status: res.status });
+      // Learn from the provider's own rate-limit headers: remember reported limits and rest a key that just
+      // used up its window instead of spending a request to find out.
+      const reported = parseRateLimitHeaders(res.headers);
+      deps.observedLimits?.record(provider.provider, model.id, reported);
+      const exhausted = exhaustedFor(reported);
+      if (exhausted > 0) pool.cooldown(key, exhausted);
       if (res.status === 429) {
         pool.cooldown(key, parseRetryAfter(res, 60_000));
         await res.body?.cancel();
