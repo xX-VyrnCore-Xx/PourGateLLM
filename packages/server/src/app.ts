@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { Hono, type Context } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { serveStatic } from '@hono/node-server/serve-static';
 import type { ProviderEntry } from '@pourgate/shared';
 import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
@@ -44,6 +45,8 @@ export interface AppOptions {
   scoring?: Scoring;
   /** Eval runner/store, exposed through the admin API. */
   evals?: { runner: EvalRunner; store: EvalStore; strategy: Strategy; tasksPerModel: number; tasks: number };
+  /** Largest accepted JSON request body in bytes (default 20 MB). */
+  maxBodyBytes?: number;
   /** Largest accepted audio upload in bytes (default 25 MB). */
   maxUploadBytes?: number;
   /** Limits reported by providers (from rate-limit headers). */
@@ -144,6 +147,19 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       );
     });
   }
+
+  // Request size limits, applied before authentication so oversized bodies are never read.
+  const tooLarge = (c: Context) =>
+    c.req.path.startsWith('/v1/messages')
+      ? anthropicError(413, 'Request body is too large')
+      : errorResponse(413, 'Request body is too large', 'invalid_request_error', 'request_too_large');
+  const jsonLimit = bodyLimit({ maxSize: opts.maxBodyBytes ?? 20 * 1024 * 1024, onError: tooLarge });
+  const uploadLimit = bodyLimit({ maxSize: maxUploadBytes + 1024 * 1024, onError: tooLarge });
+  app.use('/v1/*', (c, next) => (c.req.path === '/v1/audio/transcriptions' ? uploadLimit(c, next) : jsonLimit(c, next)));
+  app.use(
+    '/admin/api/*',
+    bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: 'request body is too large' }, 413) }),
+  );
 
   app.use('/v1/*', async (c, next) => {
     const header = c.req.header('authorization') ?? '';

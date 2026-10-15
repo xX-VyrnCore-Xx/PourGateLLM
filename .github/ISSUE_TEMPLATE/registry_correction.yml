@@ -1,0 +1,25 @@
+name: Registry correction or new provider
+description: A model id, limit, capability or provider is wrong or missing
+labels: [registry]
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider and model
+      placeholder: groq / llama-3.3-70b-versatile
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: What should change?
+      description: The current value, the correct value and whether it is per minute or per day.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Source
+      description: Link to the provider's documentation, or say you verified it with a real response.
+    validations:
+      required: true

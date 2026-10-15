@@ -319,6 +319,7 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_REGISTRY_URL` | | Bundle URL to sync the registry from. |
 | `POURGATE_REGISTRY_PUBKEY` | | Ed25519 public key (PEM or file path). When set, bundles **must** be signed. |
 | `POURGATE_REGISTRY_SYNC_HOURS` | `12` | Sync interval. |
+| `POURGATE_MAX_BODY_MB` | `20` | Largest accepted JSON request body (`413` above it). |
 | `POURGATE_MAX_UPLOAD_MB` | `25` | Largest accepted audio upload. |
 | `POURGATE_PLUGINS_DIR` | `plugins` | Directory of trusted plugin modules ([docs](docs/PLUGINS.md)). |
 | `POURGATE_STATIC_DIR` | `public`, else `packages/client/dist` | Built dashboard directory. |
@@ -388,10 +389,10 @@ Registry entries decide **where your API keys are sent**, so remote data is trea
 
 - Provider keys encrypted at rest with **AES-256-GCM**, never logged or returned by the API.
 - Client tokens stored only as **SHA-256 hashes**; the plaintext is shown once, at creation.
-- Constant-time token comparison, login rate limiting, `SameSite=Strict` sessions, cross-origin write protection.
+- Constant-time token comparison, login rate limiting, `SameSite=Strict` sessions, cross-origin write protection, request size limits (413) applied before any body is read.
 - Registry sync hardened against endpoint hijacking, rollback and oversized payloads.
 
-Found a vulnerability? Please open a private security advisory on GitHub rather than a public issue.
+Found a vulnerability? Please report it privately, see [SECURITY.md](SECURITY.md) (it also has a hardening checklist for operators).
 
 ## 🛣️ Roadmap
 
@@ -435,7 +436,7 @@ registry/    provider & model catalog (YAML)
 docs/        logo and screenshots
 ```
 
-Contributions are welcome, especially **registry fixes and new providers**. Open an issue or a PR.
+Contributions are welcome, especially **registry fixes, new providers and eval tasks**: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 📄 License
 

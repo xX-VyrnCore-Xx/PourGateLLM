@@ -1,0 +1,32 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected and what you got. Never paste API keys, tokens or prompts you consider sensitive.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A `curl` command or a short snippet is ideal.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit hash or image tag.
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: How are you running it?
+      options: [Docker, From source (Node), Other]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or response headers
+      description: For routing questions, the `x-pourgate-*` response headers help a lot.
+      render: shell

@@ -162,6 +162,7 @@ serve(
       privacy,
       semantic: semanticIndex ? { index: semanticIndex, model: process.env.POURGATE_SEMANTIC_MODEL || 'auto' } : undefined,
       observedLimits: new ObservedLimits(db),
+      maxBodyBytes: Math.max(1, Number(process.env.POURGATE_MAX_BODY_MB ?? 20)) * 1024 * 1024,
       maxUploadBytes: Math.max(1, Number(process.env.POURGATE_MAX_UPLOAD_MB ?? 25)) * 1024 * 1024,
       plugins,
       tracer,
