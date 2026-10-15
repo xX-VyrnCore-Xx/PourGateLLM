@@ -122,6 +122,14 @@ const MIGRATIONS: string[] = [
    CREATE INDEX idx_audit_ts ON audit_log(ts);`,
   `ALTER TABLE provider_keys ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;
    ALTER TABLE provider_keys ADD COLUMN weight INTEGER NOT NULL DEFAULT 1;`,
+  `CREATE TABLE custom_providers (
+     name TEXT PRIMARY KEY,
+     base_url TEXT NOT NULL,
+     signup_url TEXT,
+     models TEXT NOT NULL,
+     tools INTEGER NOT NULL DEFAULT 1,
+     created_at INTEGER NOT NULL
+   );`,
 ];
 
 /** Number of schema migrations; a database reporting this user_version is up to date. */

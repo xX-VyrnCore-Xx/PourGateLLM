@@ -170,6 +170,12 @@ export class RegistryManager {
     return { ...this._status };
   }
 
+  /** Replaces the local overrides (files plus dashboard-defined providers) and re-applies them. */
+  setOverrides(overrides: ProviderEntry[]): void {
+    this.opts.overrides = overrides;
+    this.recompute();
+  }
+
   private recompute(): void {
     const withRemote = this.remote ? applyRemote(this.opts.base, this.remote, this.key !== null).entries : this.opts.base;
     this.effective = applyOverrides(withRemote, this.opts.overrides ?? []);

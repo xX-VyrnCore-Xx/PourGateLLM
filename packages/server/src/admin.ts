@@ -6,7 +6,8 @@ import type { ProviderEntry } from '@pourgate/shared';
 import type { AuditLog } from './audit.js';
 import type { Breaker } from './breaker.js';
 import type { LatencyTracker } from './latency.js';
-import { KeyStoreError, type KeyStore } from './keys.js';
+import { KeyStoreError, MAX_KEYS_PER_PROVIDER, type KeyStore } from './keys.js';
+import { CustomProviderError, detectModels, envNameFor, type CustomProviders } from './customproviders.js';
 import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
 import type { KeyPool } from './keypool.js';
@@ -31,6 +32,11 @@ export interface AdminOptions {
   /** Dashboard-managed provider keys (encrypted). Routes are disabled when unset. */
   keyStore?: KeyStore;
   poolManager?: PoolManager;
+  /** Dashboard-defined OpenAI-compatible endpoints; `onCustomChange` re-applies them to the registry. */
+  customProviders?: CustomProviders;
+  onCustomChange?: () => void;
+  /** Provider names that come from the shipped registry or override files and cannot be reused. */
+  reservedNames?: () => Set<string>;
   requestLog?: RequestLog;
   audit?: AuditLog;
   breaker?: Breaker;
@@ -336,6 +342,75 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
       if (err instanceof KeyStoreError) return c.json({ error: err.message }, 400);
       throw err;
     }
+  });
+
+
+  // Paste many keys at once (one per line, or separated by commas/spaces). Each is checked and stored like a single key.
+  app.post('/providers/:name/keys/bulk', async (c) => {
+    const entry = providerByName(c.req.param('name'));
+    if (!entry) return c.json({ error: 'unknown provider' }, 404);
+    if (!keyAdminReady()) return c.json({ error: 'key management is not configured' }, 404);
+    const b = (await c.req.json().catch(() => null)) as { keys?: unknown; weight?: unknown } | null;
+    if (typeof b?.keys !== 'string') return c.json({ error: "'keys' must be text with one key per line" }, 400);
+    const keys = [...new Set(b.keys.split(/[\s,;]+/).map((k) => k.trim()).filter(Boolean))];
+    if (keys.length === 0) return c.json({ error: 'no keys found' }, 400);
+    if (keys.length > MAX_KEYS_PER_PROVIDER) return c.json({ error: `at most ${MAX_KEYS_PER_PROVIDER} keys at a time` }, 400);
+    const weight = b.weight === undefined ? 1 : Number(b.weight);
+    let added = 0;
+    const skipped: { key: string; reason: string }[] = [];
+    for (const key of keys) {
+      try {
+        opts.keyStore!.add(entry.provider, key, undefined, weight);
+        added++;
+      } catch (err) {
+        if (!(err instanceof KeyStoreError)) throw err;
+        skipped.push({ key: `…${key.slice(-4)}`, reason: err.message });
+      }
+    }
+    if (added > 0) opts.poolManager!.refresh();
+    opts.audit?.record('provider_key_bulk_add', { ip: clientIp(c), target: entry.provider, detail: `${added} added, ${skipped.length} skipped` });
+    return c.json({ added, skipped }, added > 0 ? 201 : 200);
+  });
+
+  app.get('/custom-providers', (c) =>
+    c.json((opts.customProviders?.list() ?? []).map((p) => ({ ...p, envName: envNameFor(p.name), keys: opts.keyStore?.list(p.name).length ?? 0 }))),
+  );
+
+  // Add an OpenAI-compatible endpoint. Models are detected from GET {base}/models unless listed explicitly;
+  // an optional `apiKey` is used for that detection only and is never stored here.
+  app.post('/custom-providers', async (c) => {
+    if (!opts.customProviders) return c.json({ error: 'custom providers are not configured' }, 404);
+    const b = (await c.req.json().catch(() => null)) as { name?: unknown; baseUrl?: unknown; models?: unknown; signupUrl?: unknown; tools?: unknown; apiKey?: unknown } | null;
+    if (typeof b?.name !== 'string' || typeof b.baseUrl !== 'string') return c.json({ error: "'name' and 'baseUrl' are required" }, 400);
+    try {
+      let models = (Array.isArray(b.models) ? b.models : typeof b.models === 'string' ? b.models.split(/[\n,]+/) : []).filter((m): m is string => typeof m === 'string' && m.trim() !== '');
+      let detected = false;
+      if (models.length === 0) {
+        models = await detectModels(b.baseUrl, typeof b.apiKey === 'string' && b.apiKey ? b.apiKey : undefined, opts.fetch as Parameters<typeof detectModels>[2]);
+        detected = true;
+      }
+      const record = opts.customProviders.add(
+        { name: b.name, baseUrl: b.baseUrl, models, signupUrl: typeof b.signupUrl === 'string' ? b.signupUrl : undefined, tools: b.tools === false ? false : true },
+        opts.reservedNames?.() ?? new Set(),
+      );
+      opts.onCustomChange?.();
+      opts.audit?.record('custom_provider_add', { ip: clientIp(c), target: record.name, detail: record.baseUrl });
+      return c.json({ ...record, envName: envNameFor(record.name), keys: 0, detected }, 201);
+    } catch (err) {
+      if (err instanceof CustomProviderError) return c.json({ error: err.message }, 400);
+      throw err;
+    }
+  });
+
+  app.delete('/custom-providers/:name', (c) => {
+    if (!opts.customProviders) return c.json({ error: 'custom providers are not configured' }, 404);
+    const name = c.req.param('name');
+    if (!opts.customProviders.remove(name)) return c.json({ error: 'not found' }, 404);
+    // Their stored keys go with them; nothing else would ever use them.
+    for (const k of opts.keyStore?.list(name) ?? []) opts.keyStore!.remove(k.id);
+    opts.onCustomChange?.();
+    opts.audit?.record('custom_provider_remove', { ip: clientIp(c), target: name });
+    return c.body(null, 204);
   });
 
   // Rename a key, switch it off/on, or change its share of traffic. Disabled keys stay stored but are not used.

@@ -8,6 +8,7 @@
 - Dependencies: zod 4, @hono/node-server 2, react 19, vite 8, @vitejs/plugin-react 6, tailwind-merge 3, vitest 5 and tsup 9 (all tests, build and the browser smoke test pass). TypeScript 7 and @types/node 26 are deliberately left out (Node 22 is the supported runtime).
 - Routing: within a tier, models are now ordered by quality score, then response speed (smoothed time-to-first-byte in coarse buckets, forgotten after 5 minutes, failures count as slow), then least used. The Providers page shows each model's latency and always links to the provider's key page.
 - CI: `pnpm audit --prod --audit-level=high` on every run.
+- Dashboard: add your own OpenAI-compatible endpoints (models auto-detected, stored in the database, hot-reloaded) and paste many keys at once.
 - API: `fusion` virtual model: a panel of different models answers in parallel and a judge merges the drafts (`POURGATE_FUSION_PANEL`).
 - Routing: named fallback chains (`profiles.yaml`, request `auto:<name>`) and sticky sessions (`x-pourgate-session` header keeps a conversation on the model that served it last, 30 min).
 - API: `POST /v1/completions` (legacy text completion with `suffix`, streaming) and `POST /v1/responses` (Responses API for Codex CLI: text, images, function tools, JSON schema output, streaming events), both on top of the normal pipeline.

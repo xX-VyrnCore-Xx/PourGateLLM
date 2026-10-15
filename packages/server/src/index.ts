@@ -20,6 +20,7 @@ import { ObservedLimits } from './ratelimits.js';
 import { AuditLog } from './audit.js';
 import { Breaker } from './breaker.js';
 import { loadProfiles } from './profiles.js';
+import { CustomProviders } from './customproviders.js';
 import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
 import { SqliteUsage, makeFingerprint, pruneUsage } from './usage.js';
@@ -95,9 +96,12 @@ setInterval(prune, 6 * 3_600_000).unref();
 
 const overridesDir = resolve(process.env.POURGATE_OVERRIDES_DIR ?? 'overrides');
 const pubKeyEnv = process.env.POURGATE_REGISTRY_PUBKEY?.trim();
+const baseRegistry = loadRegistry(resolve(process.env.POURGATE_REGISTRY_DIR ?? 'registry'));
+const fileOverrides = existsSync(overridesDir) ? loadRegistry(overridesDir) : [];
+const customProviders = new CustomProviders(db);
 const manager = new RegistryManager({
-  base: loadRegistry(resolve(process.env.POURGATE_REGISTRY_DIR ?? 'registry')),
-  overrides: existsSync(overridesDir) ? loadRegistry(overridesDir) : [],
+  base: baseRegistry,
+  overrides: [...fileOverrides, ...customProviders.entries()],
   url: process.env.POURGATE_REGISTRY_URL || undefined,
   // Inline PEM or a path to a PEM file.
   publicKeyPem: pubKeyEnv ? (pubKeyEnv.startsWith('-----BEGIN') ? pubKeyEnv : readFileSync(resolve(pubKeyEnv), 'utf8')) : undefined,
@@ -196,6 +200,9 @@ const server = serve(
       maxBodyBytes: Math.max(1, Number(process.env.POURGATE_MAX_BODY_MB ?? 20)) * 1024 * 1024,
       maxUploadBytes: Math.max(1, Number(process.env.POURGATE_MAX_UPLOAD_MB ?? 25)) * 1024 * 1024,
       plugins,
+      customProviders,
+      onCustomChange: () => manager.setOverrides([...fileOverrides, ...customProviders.entries()]),
+      reservedNames: () => new Set([...baseRegistry, ...fileOverrides].map((p) => p.provider)),
       profiles,
       fusionPanel: Math.min(5, Math.max(2, Number(process.env.POURGATE_FUSION_PANEL ?? 3))),
       breaker: new Breaker({ threshold: Math.max(1, Number(process.env.POURGATE_BREAKER_THRESHOLD ?? 5)) }),

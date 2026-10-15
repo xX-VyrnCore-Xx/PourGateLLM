@@ -1,6 +1,7 @@
 import type { AuditLog } from './audit.js';
 import { Breaker } from './breaker.js';
 import { LatencyTracker } from './latency.js';
+import type { CustomProviders } from './customproviders.js';
 import { Profiles, StickyStore } from './profiles.js';
 import { BadRequest, completionsToChat, openaiError, responsesToChat, wrapCompletions, wrapResponses } from './openai-extra.js';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -72,6 +73,10 @@ export interface AppOptions {
   breaker?: Breaker;
   /** Remembers how fast each target answers so quicker ones are preferred (a default one is created when omitted). */
   latency?: LatencyTracker;
+  /** Dashboard-defined OpenAI-compatible endpoints (admin only). */
+  customProviders?: CustomProviders;
+  onCustomChange?: () => void;
+  reservedNames?: () => Set<string>;
   /** Models asked by the `fusion` virtual model (default 3). */
   fusionPanel?: number;
   /** Named fallback chains, requested as `auto:<name>`. */
@@ -640,6 +645,9 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         pools: opts.pools,
         keyStore: opts.keyStore,
         poolManager: opts.poolManager,
+        customProviders: opts.customProviders,
+        onCustomChange: opts.onCustomChange,
+        reservedNames: opts.reservedNames,
         requestLog: opts.requestLog,
         audit: opts.audit,
         breaker,

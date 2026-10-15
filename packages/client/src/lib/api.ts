@@ -128,6 +128,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ key, label, weight }),
     }),
+  addProviderKeys: (provider: string, keys: string, weight = 1) =>
+    request<{ added: number; skipped: { key: string; reason: string }[] }>(`/providers/${encodeURIComponent(provider)}/keys/bulk`, {
+      method: 'POST',
+      body: JSON.stringify({ keys, weight }),
+    }),
+  customProviders: () => request<CustomProviderRow[]>('/custom-providers'),
+  addCustomProvider: (body: { name: string; baseUrl: string; models?: string; apiKey?: string }) =>
+    request<CustomProviderRow & { detected: boolean }>('/custom-providers', { method: 'POST', body: JSON.stringify(body) }),
+  removeCustomProvider: (name: string) => request<void>(`/custom-providers/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   removeProviderKey: (id: number) => request<void>(`/provider-keys/${id}`, { method: 'DELETE' }),
   testProviderKey: (id: number) =>
     request<{ ok: boolean; status: number | null }>(`/provider-keys/${id}/test`, { method: 'POST' }),
@@ -203,3 +212,11 @@ export const api = {
   registry: () => request<RegistryStatus | null>('/registry'),
   syncRegistry: () => request<RegistryStatus>('/registry/sync', { method: 'POST' }),
 };
+
+export interface CustomProviderRow {
+  name: string;
+  baseUrl: string;
+  models: string[];
+  envName: string;
+  keys: number;
+}
