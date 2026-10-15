@@ -18,6 +18,7 @@ import { PluginHost } from './plugins.js';
 import { SemanticIndex } from './semantic.js';
 import { ObservedLimits } from './ratelimits.js';
 import { AuditLog } from './audit.js';
+import { Breaker } from './breaker.js';
 import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
 import { SqliteUsage, makeFingerprint, pruneUsage } from './usage.js';
@@ -170,6 +171,8 @@ const server = serve(
       maxBodyBytes: Math.max(1, Number(process.env.POURGATE_MAX_BODY_MB ?? 20)) * 1024 * 1024,
       maxUploadBytes: Math.max(1, Number(process.env.POURGATE_MAX_UPLOAD_MB ?? 25)) * 1024 * 1024,
       plugins,
+      breaker: new Breaker({ threshold: Math.max(1, Number(process.env.POURGATE_BREAKER_THRESHOLD ?? 5)) }),
+      upstreamTimeoutMs: Math.max(1000, Number(process.env.POURGATE_UPSTREAM_TIMEOUT_MS ?? 60_000)),
       tracer,
       scoring,
       evals,

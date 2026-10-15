@@ -82,6 +82,7 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
                 <span className="flex items-center gap-2">
                   <code>{m.id}</code>
                   {m.tier && <Badge>{m.tier}</Badge>}
+                  {m.circuit !== 'closed' && <Badge className="bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200">{m.circuit === 'open' ? 'circuit open' : 'probing'}</Badge>}
                 </span>
                 <span className="text-xs text-muted">
                   {m.observed && (

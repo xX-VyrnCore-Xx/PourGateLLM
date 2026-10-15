@@ -59,6 +59,8 @@ export interface KeyPoolOptions {
   backend?: UsageBackend;
   /** Stable, non-reversible identifier for a key. Defaults to a truncated SHA-256. */
   fingerprint?: (key: string) => string;
+  /** Relative share of traffic per key (default 1). */
+  weights?: ReadonlyMap<string, number>;
 }
 
 export interface AcquireLimits {
@@ -72,7 +74,7 @@ export interface AcquireLimits {
 const MINUTE = 60_000;
 
 /**
- * Round-robin key pool. Limits are enforced per (key, model): rpm/tpm with in-memory sliding windows,
+ * Weighted round-robin key pool. Limits are enforced per (key, model): rpm/tpm with in-memory sliding windows,
  * rpd/tpd with day counters (UTC) and cooldowns kept in the usage backend, so they survive restarts
  * when the backend is persistent.
  */
@@ -81,13 +83,15 @@ export class KeyPool {
   private cooldownUntil: Map<string, number>;
   private readonly reqWindow = new Map<string, number[]>();
   private readonly tokWindow = new Map<string, { ts: number; tokens: number }[]>();
-  private cursor = 0;
+  private readonly credit = new Map<string, number>();
+  private weights = new Map<string, number>();
   private readonly now: () => number;
   private readonly backend: UsageBackend;
   private readonly fp: (key: string) => string;
 
   constructor(keys: readonly string[], opts: KeyPoolOptions = {}) {
     this._keys = keys;
+    this.weights = new Map(opts.weights);
     this.now = opts.now ?? Date.now;
     this.backend = opts.backend ?? new MemoryUsage();
     this.fp = opts.fingerprint ?? ((k) => createHash('sha256').update(k).digest('hex').slice(0, 24));
@@ -98,23 +102,24 @@ export class KeyPool {
     return this._keys;
   }
 
-  /** Replaces the key set, keeping state of keys that remain. */
-  setKeys(keys: readonly string[]): void {
+  /** Replaces the key set, keeping state of keys that remain. `weights` (default 1 each) bias the rotation. */
+  setKeys(keys: readonly string[], weights?: ReadonlyMap<string, number>): void {
     const keep = new Set(keys.map((k) => this.fp(k)));
+    this.weights = new Map(weights);
+    for (const k of [...this.credit.keys()]) if (!keep.has(k)) this.credit.delete(k);
     for (const k of [...this.cooldownUntil.keys()]) if (!keep.has(k)) this.cooldownUntil.delete(k);
     for (const map of [this.reqWindow, this.tokWindow] as Map<string, unknown>[]) {
       for (const k of [...map.keys()]) if (!keep.has(k.split('|')[0]!)) map.delete(k);
     }
     this._keys = keys;
-    this.cursor = keys.length === 0 ? 0 : this.cursor % keys.length;
   }
 
   /** Returns the next key allowed to serve `limits.model`, or undefined if none is. Counts the request. */
   acquire(limits: AcquireLimits, exclude: ReadonlySet<string> = new Set()): string | undefined {
     const t = this.now();
     const day = utcDay(t);
-    for (let i = 0; i < this._keys.length; i++) {
-      const key = this._keys[(this.cursor + i) % this._keys.length]!;
+    const eligible: { key: string; fp: string; reqs: number[] }[] = [];
+    for (const key of this._keys) {
       if (exclude.has(key)) continue;
       const fp = this.fp(key);
       if ((this.cooldownUntil.get(fp) ?? 0) > t) continue;
@@ -130,12 +135,29 @@ export class KeyPool {
         if (limits.rpd !== undefined && d.requests >= limits.rpd) continue;
         if (limits.tpd !== undefined && d.tokens >= limits.tpd) continue;
       }
-      reqs.push(t);
-      this.backend.addRequest(fp, limits.model, day);
-      this.cursor = (this.cursor + i + 1) % this._keys.length;
-      return key;
+      eligible.push({ key, fp, reqs });
     }
-    return undefined;
+    if (eligible.length === 0) return undefined;
+
+    // Smooth weighted round-robin (as in nginx): equal weights give plain rotation, a key with weight 3
+    // serves three requests for every one of a weight-1 key, interleaved rather than in bursts.
+    let total = 0;
+    let best = eligible[0]!;
+    let bestScore = -Infinity;
+    for (const e of eligible) {
+      const w = this.weights.get(e.key) ?? 1;
+      const score = (this.credit.get(e.fp) ?? 0) + w;
+      this.credit.set(e.fp, score);
+      total += w;
+      if (score > bestScore) {
+        best = e;
+        bestScore = score;
+      }
+    }
+    this.credit.set(best.fp, bestScore - total);
+    best.reqs.push(t);
+    this.backend.addRequest(best.fp, limits.model, day);
+    return best.key;
   }
 
   /** Records tokens reported by the provider for a completed request. */

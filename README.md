@@ -355,6 +355,8 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_REGISTRY_URL` | | Bundle URL to sync the registry from. |
 | `POURGATE_REGISTRY_PUBKEY` | | Ed25519 public key (PEM or file path). When set, bundles **must** be signed. |
 | `POURGATE_REGISTRY_SYNC_HOURS` | `12` | Sync interval. |
+| `POURGATE_UPSTREAM_TIMEOUT_MS` | `60000` | How long to wait for a provider to start answering before failing over (streams may run longer once started). |
+| `POURGATE_BREAKER_THRESHOLD` | `5` | Consecutive failures (5xx, network, timeout) after which a model is skipped for a growing pause (30 s up to 5 min); it is still tried last if nothing else answers. |
 | `POURGATE_MAX_BODY_MB` | `20` | Largest accepted JSON request body (`413` above it). |
 | `POURGATE_MAX_UPLOAD_MB` | `25` | Largest accepted audio upload. |
 | `POURGATE_PLUGINS_DIR` | `plugins` | Directory of trusted plugin modules ([docs](docs/PLUGINS.md)). |
@@ -384,6 +386,10 @@ pnpm cli db backup --out backup.db   # consistent copy while the server runs (ow
 ```
 
 A backup holds encrypted provider keys and token hashes; keep it together with (but not in the same place as) your master key.
+
+### Keys: weights and pausing
+
+Each provider can have many keys (environment `*_API_KEYS`, plus keys added in the dashboard). Dashboard keys can be **paused** without deleting them and given a **weight** (×1 to ×10): a ×3 key serves three requests for every one of a ×1 key, interleaved rather than in bursts. Limits are still tracked per key, so a key at its limit is skipped whatever its weight. Environment keys always have weight 1.
 
 ### Limits and cooldowns
 

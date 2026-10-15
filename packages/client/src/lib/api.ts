@@ -41,6 +41,7 @@ export interface ProviderRow {
   trainsOnPrompts: boolean | null;
   models: {
     id: string;
+    circuit: 'closed' | 'open' | 'half-open';
     tier: 'small' | 'medium' | 'large' | null;
     capabilities: string[];
     context: number | null;
@@ -57,6 +58,8 @@ export interface ProviderKeyRow {
   label: string;
   last4: string;
   createdAt: number;
+  enabled: boolean;
+  weight: number;
 }
 
 export interface RegistryStatus {
@@ -116,10 +119,12 @@ export const api = {
   providers: () => request<ProviderRow[]>('/providers'),
   providerKeys: (provider: string) =>
     request<{ env: number; keys: ProviderKeyRow[] }>(`/providers/${encodeURIComponent(provider)}/keys`),
-  addProviderKey: (provider: string, key: string, label: string) =>
+  updateProviderKey: (id: number, patch: { label?: string; enabled?: boolean; weight?: number }) =>
+    request<ProviderKeyRow>(`/provider-keys/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  addProviderKey: (provider: string, key: string, label: string, weight = 1) =>
     request<ProviderKeyRow>(`/providers/${encodeURIComponent(provider)}/keys`, {
       method: 'POST',
-      body: JSON.stringify({ key, label }),
+      body: JSON.stringify({ key, label, weight }),
     }),
   removeProviderKey: (id: number) => request<void>(`/provider-keys/${id}`, { method: 'DELETE' }),
   testProviderKey: (id: number) =>
