@@ -14,6 +14,7 @@
 - API: `POST /v1/completions` (legacy text completion with `suffix`, streaming) and `POST /v1/responses` (Responses API for Codex CLI: text, images, function tools, JSON schema output, streaming events), both on top of the normal pipeline.
 - Registry: `pourgate registry discover [--write]` builds registry files from the models providers themselves mark as free; shipped for OpenRouter, Kilo, Routeway, OrcaRouter, BazaarLink, Requesty and xKiro (107 models, limits learned at runtime). Up to 500 keys per provider (was 50). New `docs/FREELLMAPI-COMPARISON.md`.
 - Registry: `pourgate registry check` compares every model id with the provider's live `/models` list (keys read from the usual `*_API_KEYS` variables; keyless providers are reported as `needs-key`), and a weekly workflow opens an issue when ids vanish.
+- Dependabot no longer opens pull requests for major updates of any ecosystem (they are done by hand), so only short-lived minor/patch branches exist.
 - Fix: Dependabot now starts from the repository root so `pnpm-lock.yaml` is updated with `package.json` (before, every npm update failed `--frozen-lockfile`); major npm bumps are ignored and done by hand.
 - Registry: the OpenRouter free list was refreshed against the live `/models` endpoint (the previous only entry no longer existed).
 - Windows app: ships its own Node.js runtime (no prerequisites), hides the gateway console, writes `gateway.log`, shows a welcome screen with the generated credentials (EN/IT), current-user installer with English/Italian installer languages.
