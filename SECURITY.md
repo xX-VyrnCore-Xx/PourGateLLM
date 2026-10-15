@@ -52,3 +52,7 @@ A few protections are GitHub settings that only the repository owner can switch 
 - Configure `POURGATE_REGISTRY_PUBKEY` if you follow a remote registry; unsigned bundles can only change models and limits.
 - Install plugins only from sources you trust: they run with the gateway's privileges.
 - Keep `POURGATE_LOG_RETENTION_DAYS` short if request metadata is sensitive, and remember that the response cache stores completions.
+
+## Code scanning notes
+
+CodeQL's `js/insufficient-password-hash` rule is switched off (`.github/codeql/codeql-config.yml`). It reports the SHA-256 hashing of client tokens, which are random 192-bit API tokens rather than passwords, so a slow password hash would add cost without adding security. The rule should be re-enabled if the gateway ever stores user-chosen passwords.
