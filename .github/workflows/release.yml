@@ -76,7 +76,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" pourgatellm-*.tar.gz \
-            --title "PourGateLLM $GITHUB_REF_NAME" \
-            --generate-notes \
-            --verify-tag
+          # The release may already exist (created from the GitHub UI): then just attach the bundle.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" pourgatellm-*.tar.gz --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" pourgatellm-*.tar.gz \
+              --title "PourGateLLM $GITHUB_REF_NAME" \
+              --generate-notes \
+              --verify-tag
+          fi
