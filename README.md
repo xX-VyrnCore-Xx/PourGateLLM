@@ -95,6 +95,19 @@ Pick one. Each prints your dashboard password and API token on first run.
 | 🪟 **CLI**, Windows (Node ≥ 22.13) | `irm https://raw.githubusercontent.com/xX-VyrnCore-Xx/PourGateLLM/main/install/install.ps1 \| iex` |
 | 🪟 **Windows app** (experimental) | `.msi` / `.exe` attached to the [latest release](https://github.com/xX-VyrnCore-Xx/PourGateLLM/releases/latest), when present |
 
+### Setup, auto-start and updates
+
+```bash
+pourgate setup                 # paste provider keys step by step (hidden input; links to where to get each key)
+pourgate setup --provider groq --key gsk_...   # or non-interactively
+pourgate service install       # start at login and restart on crashes (systemd user unit / launchd / Windows scheduled task)
+pourgate service status        # also: uninstall, print
+pourgate update --check        # is there a newer release?
+pourgate update                # install it (config and data are kept)
+```
+
+`pourgate service install` makes PourGateLLM operational without a terminal: Linux uses a systemd *user* unit (run `loginctl enable-linger $USER` to keep it up after you log out), macOS a launch agent, Windows a scheduled task at logon. Logs go to `~/.pourgate/pourgate.log` (journald on Linux).
+
 ### Uninstall
 
 | Installed with | Remove with |

@@ -2,6 +2,7 @@
 provider: cerebras
 base_url: https://api.cerebras.ai/v1
 api_key_env: CEREBRAS_API_KEYS
+signup_url: https://cloud.cerebras.ai
 models:
   - id: llama3.1-8b
     tier: small

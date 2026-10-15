@@ -23,7 +23,7 @@ if (Test-Path $Config) {
 }
 $Running = $false
 try { Invoke-WebRequest "http://127.0.0.1:$PortNum/health" -TimeoutSec 2 -UseBasicParsing | Out-Null; $Running = $true } catch { }
-if ($Running) { throw "A PourGateLLM server is still running on port $PortNum. Stop it first (Ctrl+C in its window), then run this again." }
+if ($Running) { throw "A PourGateLLM server is still running on port $PortNum. Stop it first (Ctrl+C in its window, or 'pourgate service uninstall' if it runs as a task), then run this again." }
 
 Write-Host 'This will remove:'
 if (Test-Path $BinDir) { Write-Host "  - command   $BinDir (and its PATH entry)" }
@@ -34,6 +34,14 @@ else { Write-Host "It will KEEP your data and config in $Root (use -Purge to del
 if (-not $Yes) {
   $answer = Read-Host 'Continue? [y/N]'
   if ($answer -notmatch '^(y|yes)$') { Write-Host 'Cancelled.'; return }
+}
+
+# Stop and remove the auto-start task, if one was installed.
+schtasks /Query /TN PourGateLLM *> $null
+if ($LASTEXITCODE -eq 0) {
+  schtasks /End /TN PourGateLLM *> $null
+  schtasks /Delete /TN PourGateLLM /F *> $null
+  Write-Host 'Removed the PourGateLLM scheduled task.'
 }
 
 # Drop the PATH entry we added.

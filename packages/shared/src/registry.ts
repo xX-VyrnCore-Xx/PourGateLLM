@@ -42,6 +42,12 @@ export const providerSchema = z
       .regex(/^[a-z0-9][a-z0-9-]*$/)
       .optional(),
     trains_on_prompts: z.boolean().optional(),
+    /** Where to get an API key (shown by the setup wizard and the dashboard; plain text hint only). */
+    signup_url: z
+      .string()
+      .url()
+      .refine((u) => u.startsWith('https://'), 'must be an https URL')
+      .optional(),
     models: z.array(modelSchema).min(1),
   })
   .strict();

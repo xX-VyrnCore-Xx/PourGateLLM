@@ -190,7 +190,11 @@ const server = serve(
     port,
   },
   (info) => {
-    console.log(`PourGateLLM listening on :${info.port} (${poolManager.pools.size} provider(s) enabled)`);
+    const enabled = [...poolManager.pools.keys()];
+    console.log(`PourGateLLM listening on :${info.port} (${enabled.length} provider(s) enabled${enabled.length ? `: ${enabled.join(', ')}` : ''})`);
+    console.log(`  API base URL  http://localhost:${info.port}/v1`);
+    if (process.env.POURGATE_ADMIN_PASSWORD) console.log(`  Dashboard     http://localhost:${info.port}/`);
+    if (enabled.length === 0) console.log('  No provider has an API key yet: run "pourgate setup" (or add keys in the dashboard) to get started.');
     if (process.env.POURGATE_REGISTRY_URL) {
       const hours = Number(process.env.POURGATE_REGISTRY_SYNC_HOURS ?? 12);
       manager.start(Math.max(0.1, hours) * 3_600_000);

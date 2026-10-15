@@ -3,6 +3,11 @@ import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openDatabase } from './db.js';
 import { backup, check, maintain, stats } from './dbtools.js';
+import { spawnSync } from 'node:child_process';
+import { addKeysNonInteractive, runSetupWizard, type SetupIO } from './setup.js';
+import { installService, serviceStatus, uninstallService, systemdUnit, launchdPlist, windowsTaskCommand, type ServicePlatform, type ServiceSpec } from './service.js';
+import { homedir } from 'node:os';
+import { createInterface } from 'node:readline/promises';
 import { runDoctor, symbol } from './doctor.js';
 import { loadRegistry } from './registry.js';
 import { buildBundle, generateSigningKeys, signBundle } from './registry-sync.js';
@@ -19,6 +24,8 @@ function usage(): never {
   cli tokens revoke <id>
   cli registry bundle [--dir registry] --out <file> [--version <n>] [--sign <private.pem>]
   cli registry keygen --out-dir <dir>
+  cli setup [--provider <name> --key <key>]...
+  cli service install | uninstall | status | print
   cli doctor [--live] [--url http://localhost:3000] [--token <token>]
   cli db stats | check | optimize
   cli db backup --out <file>`);
@@ -37,7 +44,114 @@ const positiveInt = (v: string | undefined, flag: string): number | undefined =>
 
 const dbPath = () => resolve(process.env.POURGATE_DB ?? 'data/pourgate.db');
 
-if (group === 'doctor') {
+const loadRegistryForCli = () => loadRegistry(resolve(process.env.POURGATE_REGISTRY_DIR ?? 'registry'));
+const configFile = () => resolve(process.env.POURGATE_CONFIG_FILE ?? '.env');
+
+/** Reads a line from the terminal without echoing it (shows * instead). */
+function askSecret(question: string): Promise<string> {
+  return new Promise((done) => {
+    process.stdout.write(question);
+    if (!process.stdin.isTTY) {
+      // Piped input: read a whole line.
+      const rl = createInterface({ input: process.stdin });
+      rl.once('line', (l) => {
+        rl.close();
+        done(l.trim());
+      });
+      return;
+    }
+    let buf = '';
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
+    const onData = (ch: string) => {
+      for (const c of ch) {
+        if (c === '\r' || c === '\n') {
+          process.stdin.setRawMode(false);
+          process.stdin.pause();
+          process.stdin.off('data', onData);
+          process.stdout.write('\n');
+          return done(buf.trim());
+        }
+        if (c === '\u0003') process.exit(130);
+        if (c === '\u007f' || c === '\b') {
+          if (buf.length) {
+            buf = buf.slice(0, -1);
+            process.stdout.write('\b \b');
+          }
+        } else {
+          buf += c;
+          process.stdout.write('*');
+        }
+      }
+    };
+    process.stdin.on('data', onData);
+  });
+}
+
+const serviceSpec = (): ServiceSpec => ({
+  platform: process.platform as ServicePlatform,
+  nodePath: process.execPath,
+  launcher: resolve(process.env.POURGATE_APP_DIR ?? '.', 'bin', 'pourgate.mjs'),
+  home: resolve(process.env.POURGATE_HOME ?? resolve(homedir(), '.pourgate')),
+  userHome: homedir(),
+});
+const runCmd = (cmd: string, args: string[]) => {
+  const r = spawnSync(cmd, args, { encoding: 'utf8' });
+  return { code: r.status ?? 1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+};
+
+if (group === 'setup') {
+  const { values } = parseArgs({ args: process.argv.slice(3), options: { provider: { type: 'string', multiple: true }, key: { type: 'string', multiple: true } } });
+  const registry = loadRegistryForCli();
+  if (values.provider?.length || values.key?.length) {
+    if (!values.provider || !values.key || values.provider.length !== values.key.length) {
+      console.error('Give --provider and --key in pairs, e.g. --provider groq --key gsk_...');
+      process.exit(2);
+    }
+    try {
+      const added = addKeysNonInteractive(configFile(), registry, values.provider.map((provider, i) => ({ provider, key: values.key![i]! })));
+      for (const a of added) console.log(`+ ${a.provider}: key added to ${a.envName}`);
+      console.log(`Saved to ${configFile()}. Restart the gateway to use them.`);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
+  } else {
+    const io: SetupIO = {
+      ask: async (q) => {
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        const a = await rl.question(q);
+        rl.close();
+        return a.trim();
+      },
+      askSecret,
+      print: (l) => console.log(l),
+    };
+    const res = await runSetupWizard({ configFile: configFile(), registry, io });
+    console.log(`\nSaved to ${configFile()}${res.added.length ? ` (${res.added.length} key${res.added.length > 1 ? 's' : ''} added)` : ''}. Restart the gateway to apply changes.`);
+    console.log('Next: "pourgate doctor --live" checks the keys, "pourgate start" runs the gateway.');
+  }
+} else if (group === 'service') {
+  const spec = serviceSpec();
+  if (action === 'install') {
+    try {
+      for (const step of installService(spec, runCmd)) console.log(step);
+      console.log('PourGateLLM will now start automatically and restart if it crashes. Check it with: pourgate service status');
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
+  } else if (action === 'uninstall') {
+    const steps = uninstallService(spec, runCmd);
+    console.log(steps.length ? steps.join('\n') : 'No service was installed.');
+  } else if (action === 'status') {
+    const st = serviceStatus(spec, runCmd);
+    console.log(`${st.installed ? 'installed' : 'not installed'}, ${st.running ? 'running' : 'not running'} (${st.detail})`);
+  } else if (action === 'print') {
+    console.log(spec.platform === 'linux' ? systemdUnit(spec) : spec.platform === 'darwin' ? launchdPlist(spec) : windowsTaskCommand(spec));
+  } else usage();
+} else if (group === 'doctor') {
   const { values } = parseArgs({ args: process.argv.slice(3), options: { live: { type: 'boolean' }, url: { type: 'string' }, token: { type: 'string' } } });
   const checks = await runDoctor({
     env: process.env,

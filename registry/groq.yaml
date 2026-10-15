@@ -3,6 +3,7 @@
 provider: groq
 base_url: https://api.groq.com/openai/v1
 api_key_env: GROQ_API_KEYS
+signup_url: https://console.groq.com/keys
 models:
   - id: llama-3.3-70b-versatile
     tier: large

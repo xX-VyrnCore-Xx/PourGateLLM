@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `pourgate setup` (interactive and `--provider/--key`), `pourgate service install|uninstall|status|print` (systemd user unit, launchd, Windows scheduled task), `pourgate update [--check]`; colored help and a friendlier startup banner. Registry entries may carry a `signup_url` hint. Uninstallers also remove the service.
 - `pourgate doctor [--live] [--url]`: read-only diagnosis of an installation; `pnpm smoke`: end-to-end self-test with a fake provider (also in CI); `docs/TESTING.md`.
 - Uninstallers: `pourgate uninstall [--purge] [--yes]` (`install/uninstall.sh`, `install/uninstall.ps1`) and `install/uninstall-docker.sh`; installers record what they installed (`install.json`) and report updates.
 - Cache: coalescing of identical in-flight requests, stale-if-error (`POURGATE_CACHE_STALE_SECONDS`), byte cap (`POURGATE_CACHE_MAX_MB`), per-model clear, served-result counters.

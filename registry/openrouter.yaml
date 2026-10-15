@@ -2,6 +2,7 @@
 provider: openrouter
 base_url: https://openrouter.ai/api/v1
 api_key_env: OPENROUTER_API_KEYS
+signup_url: https://openrouter.ai/keys
 models:
   - id: meta-llama/llama-3.3-70b-instruct:free
     tier: large

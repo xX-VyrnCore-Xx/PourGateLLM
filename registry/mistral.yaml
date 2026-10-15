@@ -2,6 +2,7 @@
 provider: mistral
 base_url: https://api.mistral.ai/v1
 api_key_env: MISTRAL_API_KEYS
+signup_url: https://console.mistral.ai/api-keys
 models:
   - id: mistral-small-latest
     tier: medium
