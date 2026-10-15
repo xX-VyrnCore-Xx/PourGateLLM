@@ -94,6 +94,8 @@ Pick one. Each prints your dashboard password and API token on first run.
 | 🐧🍎 **CLI**, Linux / macOS (Node ≥ 22.13) | `curl -fsSL https://raw.githubusercontent.com/xX-VyrnCore-Xx/PourGateLLM/main/install/install.sh \| sh` |
 | 🪟 **CLI**, Windows (Node ≥ 22.13) | `irm https://raw.githubusercontent.com/xX-VyrnCore-Xx/PourGateLLM/main/install/install.ps1 \| iex` |
 | 🪟 **Windows app** (experimental) | `.msi` / `.exe` attached to the [latest release](https://github.com/xX-VyrnCore-Xx/PourGateLLM/releases/latest), when present |
+| 🍎 **macOS app** (experimental, Apple Silicon) | `.dmg` attached to the latest release, when present. Not notarised: the first time, right-click the app → **Open**. Never run on a Mac by the author. |
+| 📱 **Phone / tablet** | Open the dashboard in the browser and choose *Add to Home Screen* / *Install app* (a PWA: no store, no app to maintain). Browsers only offer it on `localhost` or **https**, so put the gateway behind a reverse proxy or a tunnel (Tailscale, Cloudflare Tunnel) when you reach it from a phone. |
 
 ### Setup, auto-start and updates
 
