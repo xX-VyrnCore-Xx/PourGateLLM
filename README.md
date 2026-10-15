@@ -92,6 +92,15 @@ cp .env.example .env          # set POURGATE_TOKENS, POURGATE_ADMIN_PASSWORD and
 docker compose up -d --build
 ```
 
+Or run the prebuilt image from GitHub Packages (published on every release):
+
+```bash
+docker run -d --name pourgate -p 3000:3000 --env-file .env \
+  -v pourgate-data:/app/data ghcr.io/xx-vyrncore-xx/pourgatellm:latest
+```
+
+Release tarballs (server + dashboard + registry) are attached to each [GitHub Release](https://github.com/xX-VyrnCore-Xx/PourGateLLM/releases).
+
 ### From source
 
 Requires **Node ≥ 22.13** and **pnpm**.

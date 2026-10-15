@@ -1,7 +1,7 @@
 {
   "name": "pourgatellm",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Self-hosted gateway that unifies free LLM tiers behind one OpenAI-compatible API: smart failover, prompt-complexity routing, per-client tokens, encrypted keys and an open model registry.",
   "keywords": [
     "llm",
