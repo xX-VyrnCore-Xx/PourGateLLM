@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { runDoctor, symbol } from './doctor.js';
 import { loadRegistry } from './registry.js';
+import { checkRegistry } from './registry-check.js';
 import { buildBundle, generateSigningKeys, signBundle } from './registry-sync.js';
 import { TokenStore } from './tokens.js';
 
@@ -24,6 +25,7 @@ function usage(): never {
   cli tokens revoke <id>
   cli registry bundle [--dir registry] --out <file> [--version <n>] [--sign <private.pem>]
   cli registry keygen --out-dir <dir>
+  cli registry check [--provider <name>]   (compare model ids with each provider's live /models list)
   cli setup [--provider <name> --key <key>]...
   cli service install | uninstall | status | print
   cli doctor [--live] [--url http://localhost:3000] [--token <token>]
@@ -209,6 +211,15 @@ if (group === 'setup') {
       writeFileSync(`${values.out}.sig`, `${signBundle(bundle, readFileSync(resolve(values.sign), 'utf8'))}\n`);
       console.log(`Wrote ${values.out}.sig`);
     }
+  } else if (action === 'check') {
+    const { values } = parseArgs({ args: rest, options: { provider: { type: 'string' } } });
+    const results = await checkRegistry(loadRegistryForCli(), { only: values.provider });
+    for (const r of results) {
+      const mark = { ok: '✓', stale: '✗', 'needs-key': '–', unreachable: '!' }[r.status];
+      console.log(`${mark} ${r.provider}: ${r.status}${r.status === 'ok' ? ` (${r.checked} of ${r.listed} listed models checked)` : ''}${r.detail ? ` — ${r.detail}` : ''}`);
+      for (const id of r.missing) console.log(`    no longer listed: ${id}`);
+    }
+    if (results.some((r) => r.status === 'stale')) process.exitCode = 1;
   } else if (action === 'keygen') {
     const { values } = parseArgs({ args: rest, options: { 'out-dir': { type: 'string' } } });
     if (!values['out-dir']) usage();

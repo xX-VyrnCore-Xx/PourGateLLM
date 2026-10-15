@@ -460,6 +460,8 @@ models:
 
 **Contributing a fix?** Edit the file under [`registry/`](registry) and open a PR. CI validates the schema.
 
+**Is the registry still accurate?** `pnpm cli registry check` asks each provider for its live `/models` list and reports ids that disappeared (it uses your `*_API_KEYS` for providers that require one). A weekly workflow does the same for the public ones.
+
 **Following a published bundle?** Build one and point gateways at it:
 
 ```bash
