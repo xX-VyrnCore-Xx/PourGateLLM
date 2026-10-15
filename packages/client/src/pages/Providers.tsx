@@ -74,10 +74,10 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
               <Badge className="bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200">{t('disabled')}</Badge>
             )}
           </div>
-          {!p.enabled && p.signupUrl && (
+          {p.signupUrl && (
             <p className="mb-2 text-xs">
               <a href={p.signupUrl} target="_blank" rel="noopener noreferrer" className="text-accent underline-offset-2 hover:underline">
-                {t('getKey')} ↗
+                {p.enabled ? t('getMoreKeys') : t('getKey')} ↗
               </a>
             </p>
           )}
@@ -89,6 +89,7 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
                 <span className="flex items-center gap-2">
                   <code>{m.id}</code>
                   {m.tier && <Badge>{m.tier}</Badge>}
+                  {m.latencyMs ? <span className="text-xs text-muted" title="Smoothed time until the first response bytes">~{m.latencyMs >= 1000 ? `${(m.latencyMs / 1000).toFixed(1)} s` : `${m.latencyMs} ms`}</span> : null}
                   {m.circuit !== 'closed' && <Badge className="bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200">{m.circuit === 'open' ? 'circuit open' : 'probing'}</Badge>}
                 </span>
                 <span className="text-xs text-muted">

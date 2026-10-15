@@ -6,6 +6,8 @@
 - Repository: Dependabot (npm daily, actions/docker/cargo weekly) with auto-merge for minor/patch, CodeQL, dependency review, least-privilege workflows, CODEOWNERS.
 - Releases: older ones are pruned automatically, keeping the newest three (`.github/workflows/cleanup-releases.yml`).
 - Dependencies: zod 4, @hono/node-server 2, react 19, vite 8, @vitejs/plugin-react 6, tailwind-merge 3, vitest 5 and tsup 9 (all tests, build and the browser smoke test pass). TypeScript 7 and @types/node 26 are deliberately left out (Node 22 is the supported runtime).
+- Routing: within a tier, models are now ordered by quality score, then response speed (smoothed time-to-first-byte in coarse buckets, forgotten after 5 minutes, failures count as slow), then least used. The Providers page shows each model's latency and always links to the provider's key page.
+- CI: `pnpm audit --prod --audit-level=high` on every run.
 - Registry: `pourgate registry check` compares every model id with the provider's live `/models` list (keys read from the usual `*_API_KEYS` variables; keyless providers are reported as `needs-key`), and a weekly workflow opens an issue when ids vanish.
 - Fix: Dependabot now starts from the repository root so `pnpm-lock.yaml` is updated with `package.json` (before, every npm update failed `--frozen-lockfile`); major npm bumps are ignored and done by hand.
 - Registry: the OpenRouter free list was refreshed against the live `/models` endpoint (the previous only entry no longer existed).

@@ -43,6 +43,7 @@ export interface ProviderRow {
   models: {
     id: string;
     circuit: 'closed' | 'open' | 'half-open';
+    latencyMs?: number | null;
     tier: 'small' | 'medium' | 'large' | null;
     capabilities: string[];
     context: number | null;

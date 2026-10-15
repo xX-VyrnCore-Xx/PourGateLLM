@@ -5,6 +5,7 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 import type { ProviderEntry } from '@pourgate/shared';
 import type { AuditLog } from './audit.js';
 import type { Breaker } from './breaker.js';
+import type { LatencyTracker } from './latency.js';
 import { KeyStoreError, type KeyStore } from './keys.js';
 import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
@@ -33,6 +34,7 @@ export interface AdminOptions {
   requestLog?: RequestLog;
   audit?: AuditLog;
   breaker?: Breaker;
+  latency?: LatencyTracker;
   /** Runs a chat request through the full gateway pipeline (routing, cache, failover) as the admin. */
   playground?: (body: Record<string, unknown>) => Response | Promise<Response>;
   cache?: ResponseCache;
@@ -406,6 +408,7 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
           models: p.models.map((m) => ({
             id: m.id,
             circuit: opts.breaker?.state(`${p.provider}|${m.id}`) ?? 'closed',
+            latencyMs: Math.round(opts.latency?.average(`${p.provider}|${m.id}`) ?? 0) || null,
             tier: m.tier ?? null,
             capabilities: m.capabilities,
             context: m.context ?? null,
