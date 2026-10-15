@@ -12,7 +12,7 @@ const checkSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('includes'), value: z.array(z.string()).min(1) }),
   z.object({ type: z.literal('includesAll'), value: z.array(z.string()).min(1) }),
   z.object({ type: z.literal('regex'), value: z.string() }),
-  z.object({ type: z.literal('json'), value: z.record(z.unknown()) }),
+  z.object({ type: z.literal('json'), value: z.record(z.string(), z.unknown()) }),
 ]);
 
 const taskSchema = z.object({
