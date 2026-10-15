@@ -1,11 +1,50 @@
-# Unverified: the ':free' model list changes often; rpm is the commonly documented free-tier limit.
+# Free ('...:free') models, checked against https://openrouter.ai/api/v1/models on 2026-10-15.
+# OpenRouter rotates its free list often: ids that disappear simply stop being offered, and the
+# 'rpm' value is the documented free-tier cap (per account), not measured.
 provider: openrouter
 base_url: https://openrouter.ai/api/v1
 api_key_env: OPENROUTER_API_KEYS
 signup_url: https://openrouter.ai/keys
 models:
-  - id: meta-llama/llama-3.3-70b-instruct:free
+  - id: nvidia/nemotron-3-ultra-550b-a55b:free
     tier: large
-    family: llama-3.3-70b
+    family: nemotron-3-ultra
     capabilities: [chat, tools]
+    context: 1000000
     limits: { rpm: 20 }
+    verified_at: '2026-10-15'
+  - id: nvidia/nemotron-3-super-120b-a12b:free
+    tier: large
+    family: nemotron-3-super
+    capabilities: [chat, tools]
+    context: 262144
+    limits: { rpm: 20 }
+    verified_at: '2026-10-15'
+  - id: google/gemma-4-31b-it:free
+    tier: medium
+    family: gemma-4-31b
+    capabilities: [chat, tools, vision]
+    context: 262144
+    limits: { rpm: 20 }
+    verified_at: '2026-10-15'
+  - id: google/gemma-4-26b-a4b-it:free
+    tier: medium
+    family: gemma-4-26b
+    capabilities: [chat, tools, vision]
+    context: 262144
+    limits: { rpm: 20 }
+    verified_at: '2026-10-15'
+  - id: poolside/laguna-s-2.1:free
+    tier: medium
+    family: laguna-2.1
+    capabilities: [chat, tools]
+    context: 262144
+    limits: { rpm: 20 }
+    verified_at: '2026-10-15'
+  - id: liquid/lfm-2.5-2.6b:free
+    tier: small
+    family: lfm-2.5
+    capabilities: [chat, tools]
+    context: 65536
+    limits: { rpm: 20 }
+    verified_at: '2026-10-15'
