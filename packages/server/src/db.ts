@@ -1,7 +1,8 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
+import { backup, tune } from './dbtools.js';
 
 // Loaded via require: vite-node (vitest) strips the `node:` prefix from node:sqlite, breaking a static import.
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
@@ -124,13 +125,25 @@ const MIGRATIONS: string[] = [
 export function openDatabase(path: string): DatabaseSync {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
-  migrate(db);
+  tune(db);
+  migrate(db, path);
   return db;
 }
 
-function migrate(db: DatabaseSync): void {
+function migrate(db: DatabaseSync, path: string): void {
   const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
+  // Keep a copy of an existing database before upgrading its schema, so a bad upgrade can be undone.
+  if (path !== ':memory:' && row.user_version > 0 && row.user_version < MIGRATIONS.length) {
+    const copy = `${path}.pre-v${row.user_version}.bak`;
+    if (!existsSync(copy)) {
+      try {
+        backup(db, copy);
+        console.log(`[db] schema v${row.user_version} -> v${MIGRATIONS.length}: backup written to ${copy}`);
+      } catch (err) {
+        console.warn(`[db] could not write the pre-migration backup: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+  }
   for (let v = row.user_version; v < MIGRATIONS.length; v++) {
     db.exec('BEGIN');
     try {

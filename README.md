@@ -347,6 +347,19 @@ pnpm cli tokens revoke 1
 docker compose exec pourgate node dist/cli.js tokens create --name laptop --rpm 30
 ```
 
+### Database
+
+Everything lives in one SQLite file (`POURGATE_DB`, WAL mode). The server flushes it on shutdown, tunes it for concurrent CLI use (`busy_timeout`), runs `PRAGMA optimize` every 6 hours, and copies an existing database to `<db>.pre-v<N>.bak` before upgrading its schema.
+
+```bash
+pnpm cli db stats                    # schema version, file sizes, rows per table
+pnpm cli db check                    # integrity + foreign-key check
+pnpm cli db optimize                 # refresh statistics, shrink the WAL
+pnpm cli db backup --out backup.db   # consistent copy while the server runs (owner-only)
+```
+
+A backup holds encrypted provider keys and token hashes; keep it together with (but not in the same place as) your master key.
+
 ### Limits and cooldowns
 
 Registry limits apply per **key and model**. `rpm`/`tpm` use a sliding 60 s window (in memory), while `rpd`/`tpd` are UTC-day counters and key cooldowns are persisted in SQLite, so they survive restarts. Cooldowns follow the provider's `Retry-After` (capped at 24 h). Keys are tracked by an HMAC fingerprint, never by their raw value.

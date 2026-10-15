@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createApp } from './app.js';
 import { openDatabase } from './db.js';
+import { maintain } from './dbtools.js';
 import { KeyStore } from './keys.js';
 import { PoolManager } from './pools.js';
 import { loadRegistry } from './registry.js';
@@ -83,6 +84,7 @@ const prune = () => {
   evalStore.prune(Date.now() - 30 * 86_400_000);
   requestLog.prune(Date.now() - retentionMs);
   audit.prune(Date.now() - 180 * 86_400_000);
+  maintain(db);
 };
 prune();
 setInterval(prune, 6 * 3_600_000).unref();
@@ -152,7 +154,7 @@ if (!process.env.POURGATE_ADMIN_PASSWORD) {
 }
 
 const port = Number(process.env.PORT ?? 3000);
-serve(
+const server = serve(
   {
     fetch: createApp({
       registry: () => manager.entries,
@@ -190,3 +192,22 @@ serve(
     }
   },
 );
+
+// Graceful shutdown: stop accepting connections, flush the WAL and close the database.
+let closing = false;
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    if (closing) return;
+    closing = true;
+    server.close(() => {
+      try {
+        maintain(db);
+        db.close();
+      } finally {
+        process.exit(0);
+      }
+    });
+    // Streams may keep connections open: don't hang forever.
+    setTimeout(() => process.exit(0), 5000).unref();
+  });
+}

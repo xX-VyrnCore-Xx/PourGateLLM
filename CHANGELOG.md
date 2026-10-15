@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Database: tuned pragmas, periodic optimize, graceful shutdown, `cli db stats|check|optimize|backup`, automatic pre-migration backup.
+- Release workflow can be started manually (`workflow_dispatch`) and creates the tag itself.
 - Dashboard playground (admin-only, streamed token by token) showing the route chosen for each prompt.
 - Admin audit log (API `GET /admin/api/audit` and dashboard tab).
 - Experimental Tauri desktop scaffold.
