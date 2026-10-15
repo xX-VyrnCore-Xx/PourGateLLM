@@ -231,8 +231,9 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
   app.get('/cache', (c) => c.json(opts.cache ? { enabled: true, mode: opts.cache.mode, ...opts.cache.stats() } : { enabled: false }));
   app.delete('/cache', (c) => {
     if (!opts.cache) return c.json({ error: 'cache is not enabled' }, 404);
-    const cleared = opts.cache.clear();
-    opts.audit?.record('cache_clear', { ip: clientIp(c), detail: `${cleared} entries` });
+    const model = c.req.query('model') || undefined;
+    const cleared = opts.cache.clear(model);
+    opts.audit?.record('cache_clear', { ip: clientIp(c), target: model, detail: `${cleared} entries` });
     return c.json({ cleared });
   });
 

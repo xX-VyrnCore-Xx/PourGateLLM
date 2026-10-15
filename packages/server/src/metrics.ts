@@ -1,3 +1,4 @@
+import type { CacheResult } from './cache.js';
 const BUCKETS = [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60];
 
 const esc = (v: string) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
@@ -27,7 +28,7 @@ export class Metrics {
   private readonly cacheResults = new Map<string, { labels: Record<string, string>; n: number }>();
   private readonly hist = new Map<string, { labels: Record<string, string>; counts: number[]; sum: number; n: number }>();
 
-  cache(result: 'hit' | 'semantic' | 'miss'): void {
+  cache(result: CacheResult): void {
     bump(this.cacheResults, { result }, 1);
   }
 

@@ -40,7 +40,7 @@ export function Analytics({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [range, setRange] = useState('24h');
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cache, setCache] = useState<{ enabled: boolean; entries?: number; hits?: number; bytes?: number } | null>(null);
+  const [cache, setCache] = useState<{ enabled: boolean; entries?: number; hits?: number; bytes?: number; served?: Record<string, number> } | null>(null);
 
   const loadCache = () => api.cache().then(setCache).catch(() => setCache(null));
   useEffect(() => void loadCache(), []);
@@ -91,6 +91,13 @@ export function Analytics({ onUnauthorized }: { onUnauthorized: () => void }) {
             <span className="text-muted">
               {cache.entries} {t('cacheEntries')} · {cache.hits} {t('cacheStoredHits')} · {((cache.bytes ?? 0) / 1024).toFixed(1)} KB
             </span>
+            {cache.served && (
+              <span className="mt-1 block text-xs text-muted">
+                {Object.entries(cache.served)
+                  .map(([k, n]) => `${k} ${n}`)
+                  .join(' · ')}
+              </span>
+            )}
           </p>
           <Button variant="outline" onClick={() => api.clearCache().then(loadCache)}>
             {t('clearCache')}

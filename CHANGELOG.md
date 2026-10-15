@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Cache: coalescing of identical in-flight requests, stale-if-error (`POURGATE_CACHE_STALE_SECONDS`), byte cap (`POURGATE_CACHE_MAX_MB`), per-model clear, served-result counters.
+
 - Provider keys: pause/resume and traffic weights (×1–×10) from the dashboard and `PATCH /admin/api/provider-keys/:id`.
 - Routing: per-model circuit breaker (`POURGATE_BREAKER_THRESHOLD`) and upstream timeout (`POURGATE_UPSTREAM_TIMEOUT_MS`); circuit state shown in the dashboard.
 

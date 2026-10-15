@@ -1,3 +1,4 @@
+import type { CacheResult } from './cache.js';
 import { readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -28,7 +29,7 @@ export interface ResponseInfo {
   status: number;
   totalMs: number;
   tokens: number | null;
-  cache: 'hit' | 'semantic' | 'miss' | null;
+  cache: CacheResult | null;
   clientId: number | null;
   error: string | null;
 }
