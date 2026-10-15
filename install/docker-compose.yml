@@ -1,0 +1,16 @@
+# PourGateLLM from the published image (no build needed).
+#   docker compose up -d
+# Pin a version with POURGATE_IMAGE_TAG=0.1.1 in .env or the shell.
+services:
+  pourgate:
+    image: ghcr.io/xx-vyrncore-xx/pourgatellm:${POURGATE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 3000
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - pourgate-data:/app/data
+volumes:
+  pourgate-data:
