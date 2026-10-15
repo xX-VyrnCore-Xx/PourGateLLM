@@ -2,7 +2,7 @@ import { Breaker } from './breaker.js';
 import type { ModelEntry, ProviderEntry, Tier } from '@pourgate/shared';
 import { COMPLEXITY_TIER, TIER_ORDER, analyzePrompt, requiredCapabilities, type Analysis } from './complexity.js';
 import { rankScore, type ModelScore, type Strategy } from './evals.js';
-import { KeyPool } from './keypool.js';
+import { KEYLESS, KeyPool } from './keypool.js';
 import type { LatencyTracker } from './latency.js';
 import type { Profiles, StickyStore } from './profiles.js';
 import { FUSION_MODEL, runFusion } from './fusion.js';
@@ -137,6 +137,9 @@ export function rankCandidates(
     .map((x) => x.c);
 }
 
+/** Authorization header for a key; keyless providers get none (a bogus bearer token can be rejected). */
+const authHeaders = (key: string): Record<string, string> => (key === KEYLESS ? {} : { authorization: `Bearer ${key}` });
+
 const MAX_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 function parseRetryAfter(res: Response, fallbackMs: number): number {
@@ -270,11 +273,11 @@ export async function routeChat(
             const attempt = new FormData();
             for (const [k, v] of form.entries()) if (k !== 'model') attempt.append(k, v);
             attempt.set('model', model.id);
-            res = await deps.fetch(url, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: attempt, signal: attemptSignal });
+            res = await deps.fetch(url, { method: 'POST', headers: authHeaders(key), body: attempt, signal: attemptSignal });
           } else {
             res = await deps.fetch(url, {
               method: 'POST',
-              headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+              headers: { 'content-type': 'application/json', ...authHeaders(key) },
               body: JSON.stringify({ ...(mask ? redacted!.body : body), model: model.id }),
               signal: attemptSignal,
             });

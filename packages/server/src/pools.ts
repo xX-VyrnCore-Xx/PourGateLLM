@@ -1,6 +1,6 @@
 import type { ProviderEntry } from '@pourgate/shared';
 import type { KeyStore } from './keys.js';
-import { KeyPool, type KeyPoolOptions } from './keypool.js';
+import { KEYLESS, KeyPool, type KeyPoolOptions } from './keypool.js';
 
 /** Builds one KeyPool per provider from environment keys plus keys stored in the database. */
 export class PoolManager {
@@ -39,6 +39,8 @@ export class PoolManager {
       const weights = new Map<string, number>();
       for (const k of this.envKeys(entry)) weights.set(k, 1);
       for (const k of dbKeys) if (!weights.has(k.key)) weights.set(k.key, k.weight);
+      // A keyless provider works out of the box; real keys, when added, replace the anonymous slot (they usually lift limits).
+      if (weights.size === 0 && entry.keyless) weights.set(KEYLESS, 1);
       const keys = [...weights.keys()];
       const pool = this.pools.get(entry.provider);
       if (keys.length === 0) {

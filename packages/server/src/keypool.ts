@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import { utcDay } from './tokens.js';
 
+/** Stand-in "key" for providers that need none: the router sends no Authorization header for it. */
+export const KEYLESS = '__keyless__';
+
 export interface DailyUsage {
   requests: number;
   tokens: number;

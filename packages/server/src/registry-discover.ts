@@ -13,6 +13,10 @@ export interface DiscoverySource {
   signup_url: string;
   /** True when the provider logs prompts for training on its free routes. */
   trains_on_prompts?: boolean;
+  /** The provider's free routes work without any key. */
+  keyless?: boolean;
+  /** Limits applied to every discovered model when the provider documents one for its free tier. */
+  limits?: ModelEntry['limits'];
   /** Decides from one raw `/models` row whether the model is free. */
   isFree: (row: Row) => boolean;
 }
@@ -37,7 +41,18 @@ export const SOURCES: DiscoverySource[] = [
     api_key_env: 'KILO_API_KEYS',
     signup_url: 'https://app.kilo.ai',
     trains_on_prompts: true,
+    keyless: true,
     isFree: (r) => r.isFree === true && !r.id.startsWith('kilo-auto/') && !r.id.startsWith('stealth/'),
+  },
+  {
+    // Anonymous tier: no key, rate-limited per IP (the 2 requests/minute figure comes from OVH's own docs as relayed by FreeLLMAPI, not measured).
+    provider: 'ovh',
+    base_url: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1',
+    api_key_env: 'OVH_API_KEYS',
+    signup_url: 'https://endpoints.ai.cloud.ovh.net',
+    keyless: true,
+    limits: { rpm: 2 },
+    isFree: (r) => (r.context_length as number | undefined) !== 0 && zero((r.pricing as Record<string, unknown> | undefined)?.request) && num((r.max_completion_tokens as unknown)) !== 0,
   },
   {
     provider: 'routeway',
@@ -142,7 +157,7 @@ export async function discover(opts: { only?: string; fetch?: Fetcher; env?: Nod
         const m = toModel(row);
         if (!m) continue;
         seen.add(row.id);
-        models.push({ ...m, verified_at: today });
+        models.push({ ...m, ...(source.limits ? { limits: source.limits } : {}), verified_at: today });
       }
       if (models.length === 0) {
         out.push({ source, error: 'no free models recognised' });
@@ -158,6 +173,7 @@ export async function discover(opts: { only?: string; fetch?: Fetcher; env?: Nod
           auth: 'bearer',
           signup_url: source.signup_url,
           ...(source.trains_on_prompts ? { trains_on_prompts: true } : {}),
+          ...(source.keyless ? { keyless: true } : {}),
           models,
         } as ProviderEntry,
       });
