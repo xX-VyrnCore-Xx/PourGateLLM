@@ -271,6 +271,11 @@ export OPENAI_BASE_URL=http://localhost:3000/v1 OPENAI_API_KEY=<your token>
 codex --model auto          # Codex CLI through the gateway
 ```
 
+## 🧭 Gemini and Ollama native APIs
+
+- **Gemini** (always on): `POST /v1beta/models/{model}:generateContent`, `:streamGenerateContent?alt=sse`, `:countTokens`, `GET /v1beta/models`. Point Gemini CLI or a Google SDK at the gateway (`GOOGLE_GEMINI_BASE_URL=http://localhost:3000`) and use a client token as the API key (`x-goog-api-key`, `?key=` or `Authorization: Bearer`). Text, images, function calling, JSON mode and streaming work; a Gemini model name the registry does not know (`gemini-2.5-pro` / `flash` / `flash-lite`) maps to `auto:large` / `auto:medium` / `auto:small`. `countTokens` is an estimate (about 4 characters per token). Not supported: `embedContent`, file uploads, caching, safety settings.
+- **Ollama** (opt-in, `POURGATE_OLLAMA_API=true`): `POST /api/chat`, `/api/generate` (NDJSON streaming by default, as Ollama does), `GET /api/tags`, `/api/version`, `POST /api/show`. For Zed, JetBrains AI, Open WebUI and other local-model clients: set the host to `http://localhost:3000` and the token as API key (`Authorization: Bearer`). Clients that cannot send a token will not work, because the gateway never serves unauthenticated requests. Not supported: pull/push/create, embeddings.
+
 ## 🛠️ MCP server
 
 The gateway is also an [MCP](https://modelcontextprotocol.io) server (Streamable HTTP, stateless) at `POST /mcp` (alias `/v1/mcp`), authenticated with a normal client token. Tools: `chat` (ask a free model; `auto`, `fusion`, `auto:<profile>` or an exact id), `list_models`, `provider_status`. Calls run through the regular pipeline with the caller's token, so quotas, failover and the audit log apply.
@@ -418,6 +423,7 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_DB` | `data/pourgate.db` | SQLite database path. |
 | `PORT` | `3000` | HTTP port. |
 | `POURGATE_ROUTING_STRATEGY` | `spread` | How models are ordered inside a tier: `spread` (least used first), `balanced`, `quality` or `speed` (use measured scores). |
+| `POURGATE_OLLAMA_API` | off | Serve the Ollama-compatible API under `/api`. |
 | `POURGATE_FUSION_PANEL` | `3` | Models asked by the `fusion` virtual model (2-5). |
 | `POURGATE_PROFILES_FILE` | `profiles.yaml` | Named fallback chains (`auto:<name>`). |
 | `POURGATE_EVAL_HOURS` | `0` (off) | Run the evals automatically every N hours (they consume free-tier quota). |

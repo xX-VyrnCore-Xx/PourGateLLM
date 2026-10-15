@@ -27,7 +27,7 @@ export function openaiError(status: number, message: string, code = 'invalid_req
 // SSE plumbing
 
 /** Re-emits an upstream chat SSE stream through `onData` (one call per `data:` payload) and `onEnd`. */
-function mapSse(upstream: ReadableStream<Uint8Array>, onData: (payload: string, out: string[]) => void, onEnd: (out: string[]) => void, onFail: (out: string[]) => void): ReadableStream<Uint8Array> {
+export function mapSse(upstream: ReadableStream<Uint8Array>, onData: (payload: string, out: string[]) => void, onEnd: (out: string[]) => void, onFail: (out: string[]) => void): ReadableStream<Uint8Array> {
   const enc = new TextEncoder();
   const dec = new TextDecoder();
   const reader = upstream.getReader();
@@ -72,7 +72,7 @@ function mapSse(upstream: ReadableStream<Uint8Array>, onData: (payload: string, 
 const PASS_HEADERS = ['x-pourgate-provider', 'x-pourgate-model', 'x-pourgate-tier', 'x-pourgate-complexity', 'x-pourgate-cache', 'x-pourgate-redacted', 'x-pourgate-trace-id', 'age'];
 
 /** Shared wrapper: errors pass through untouched, streams and JSON bodies are translated. */
-async function translate(res: Response, json: (body: Json) => Json, stream: (s: ReadableStream<Uint8Array>) => ReadableStream<Uint8Array>): Promise<Response> {
+export async function translate(res: Response, json: (body: Json) => Json, stream: (s: ReadableStream<Uint8Array>) => ReadableStream<Uint8Array>): Promise<Response> {
   if (!res.ok) return res;
   const headers = new Headers();
   for (const h of PASS_HEADERS) {
@@ -88,8 +88,8 @@ async function translate(res: Response, json: (body: Json) => Json, stream: (s: 
   return new Response(JSON.stringify(json((await res.json()) as Json)), { status: 200, headers });
 }
 
-const dataLine = (v: unknown) => `data: ${JSON.stringify(v)}\n\n`;
-const finishOf = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+export const dataLine = (v: unknown) => `data: ${JSON.stringify(v)}\n\n`;
+export const finishOf = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 // ---------------------------------------------------------------------------
 // /v1/completions

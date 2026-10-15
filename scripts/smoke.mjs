@@ -183,6 +183,11 @@ try {
     const call = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'chat', arguments: { prompt: 'mcp uniq-6', model: 'fake-large' } } });
     assert(call.result?.content?.[0]?.text?.includes('pong'), `tools/call ${JSON.stringify(call)}`);
   });
+  await step('the Gemini native API answers generateContent', async () => {
+    const res = await fetch(`${base}/v1beta/models/gemini-2.5-flash:generateContent`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': 'pg-smoke' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'gemini uniq-7' }] }] }) });
+    const j = await res.json();
+    assert(res.status === 200 && j.candidates?.[0]?.content?.parts?.[0]?.text === 'pong', `gemini ${res.status} ${JSON.stringify(j)}`);
+  });
   await step('the dashboard is served', async () => {
     const res = await fetch(`${base}/`);
     assert(res.ok && (await res.text()).includes('<div id="root">'), 'dashboard not served');

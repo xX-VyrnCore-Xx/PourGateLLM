@@ -204,6 +204,7 @@ const server = serve(
       onCustomChange: () => manager.setOverrides([...fileOverrides, ...customProviders.entries()]),
       reservedNames: () => new Set([...baseRegistry, ...fileOverrides].map((p) => p.provider)),
       profiles,
+      ollama: ['1', 'true', 'yes'].includes((process.env.POURGATE_OLLAMA_API ?? '').toLowerCase()),
       fusionPanel: Math.min(5, Math.max(2, Number(process.env.POURGATE_FUSION_PANEL ?? 3))),
       breaker: new Breaker({ threshold: Math.max(1, Number(process.env.POURGATE_BREAKER_THRESHOLD ?? 5)) }),
       upstreamTimeoutMs: Math.max(1000, Number(process.env.POURGATE_UPSTREAM_TIMEOUT_MS ?? 60_000)),
