@@ -28,7 +28,7 @@ export interface ResponseInfo {
   status: number;
   totalMs: number;
   tokens: number | null;
-  cache: 'hit' | 'miss' | null;
+  cache: 'hit' | 'semantic' | 'miss' | null;
   clientId: number | null;
   error: string | null;
 }

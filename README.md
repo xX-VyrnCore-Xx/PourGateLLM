@@ -247,6 +247,14 @@ Off by default. Set `POURGATE_CACHE_TTL_SECONDS` to serve repeated identical req
 - **Control:** send `x-pourgate-cache: bypass` (or `Cache-Control: no-cache` / `no-store`) to skip the cache for a request. Hits carry `x-pourgate-cache: hit` and an `Age` header and are marked in analytics and in `pourgate_cache_requests_total`.
 - The dashboard's Analytics tab shows entries, hits and a **Clear cache** button.
 
+### Semantic cache (optional)
+
+With `POURGATE_SEMANTIC_CACHE=on`, a request that misses the exact cache is embedded (last user message only) and compared with cached prompts; if one is at least `POURGATE_SEMANTIC_THRESHOLD` similar, its answer is returned with `x-pourgate-cache: semantic` and `x-pourgate-cache-similarity`.
+
+- **Safety rails:** a match must come from the **same client**, with an **identical context** (model, system prompt, earlier turns, tools and sampling parameters; only the last user message may differ), and the usual eligibility rules apply (deterministic requests by default). Vectors live in SQLite next to the cached responses and are dropped when those expire.
+- **Cost:** every cacheable request that misses the exact cache spends one embeddings call (it counts against that provider's limits and is subject to your privacy policy). A failing embeddings call just falls back to a normal request and never rests the provider's key. It pays off when answers are long and repeated questions are common, and not when your embeddings quota is the scarcer one.
+- **Risk:** a high threshold keeps wrong answers rare but not impossible (two prompts can be close in meaning and differ in a detail that matters). Keep it off for use cases where that is unacceptable, and use `x-pourgate-cache: bypass` to skip it per request.
+
 ## 🛡️ Privacy controls
 
 Free tiers often use prompts to improve their models. Two independent controls reduce what leaves your machine:
@@ -297,6 +305,9 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_EVALS_FILE` | `evals/suite.json` | The eval suite. |
 | `POURGATE_CACHE_TTL_SECONDS` | `0` (off) | Enables the response cache; entries expire after this many seconds. |
 | `POURGATE_CACHE_MODE` | `deterministic` | `deterministic` caches requests with `temperature: 0` or a `seed`; `all` caches every non-streaming request. |
+| `POURGATE_SEMANTIC_CACHE` | off | `on` adds the semantic cache on top of the response cache (needs `POURGATE_CACHE_TTL_SECONDS`). |
+| `POURGATE_SEMANTIC_MODEL` | `auto` | Embeddings model used for it (a registry id with the `embeddings` capability, or `auto`). |
+| `POURGATE_SEMANTIC_THRESHOLD` | `0.97` | Cosine similarity needed to reuse an answer (0.5 to 1). |
 | `POURGATE_CACHE_MAX_ENTRIES` | `1000` | Oldest entries are evicted beyond this. |
 | `POURGATE_PII_MODE` | `off` | `off`, `training` (mask for providers that may train on prompts) or `all`. |
 | `POURGATE_PRIVACY_POLICY` | `any` | `any`, `no-training` (skip providers flagged `trains_on_prompts: true`) or `strict` (only providers flagged `false`). |
@@ -394,7 +405,7 @@ Found a vulnerability? Please open a private security advisory on GitHub rather 
 - [x] Periodic evals to rank models on quality, latency and reliability
 - [x] Routing by prompt complexity (heuristic classifier)
 - [x] Exact-match response cache
-- [ ] Semantic cache (embedding similarity)
+- [x] Semantic cache (opt-in, embedding similarity)
 - [x] Request analytics, JSONL export and Prometheus metrics
 - [x] OpenTelemetry (OTLP) tracing
 - [x] PII redaction and per-provider privacy policies

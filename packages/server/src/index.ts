@@ -14,6 +14,7 @@ import { Metrics } from './metrics.js';
 import { parsePiiMode, parsePolicy } from './privacy.js';
 import { Tracer, parseHeaders } from './otel.js';
 import { PluginHost } from './plugins.js';
+import { SemanticIndex } from './semantic.js';
 import { ObservedLimits } from './ratelimits.js';
 import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
@@ -69,7 +70,13 @@ if (cacheTtl > 0) {
 }
 const retentionMs = Math.max(1, Number(process.env.POURGATE_LOG_RETENTION_DAYS ?? 30)) * 86_400_000;
 const evalStore = new EvalStore(db);
+const semanticOn = cache !== undefined && /^(on|true|1)$/i.test(process.env.POURGATE_SEMANTIC_CACHE ?? '');
+const semanticIndex = semanticOn
+  ? new SemanticIndex(db, { threshold: Math.min(1, Math.max(0.5, Number(process.env.POURGATE_SEMANTIC_THRESHOLD ?? 0.97))) })
+  : undefined;
+if (process.env.POURGATE_SEMANTIC_CACHE && !cache) console.warn('[cache] POURGATE_SEMANTIC_CACHE needs POURGATE_CACHE_TTL_SECONDS > 0: semantic cache disabled');
 const prune = () => {
+  semanticIndex?.prune();
   pruneUsage(db);
   evalStore.prune(Date.now() - 30 * 86_400_000);
   requestLog.prune(Date.now() - retentionMs);
@@ -153,6 +160,7 @@ serve(
       keyStore,
       poolManager,
       privacy,
+      semantic: semanticIndex ? { index: semanticIndex, model: process.env.POURGATE_SEMANTIC_MODEL || 'auto' } : undefined,
       observedLimits: new ObservedLimits(db),
       maxUploadBytes: Math.max(1, Number(process.env.POURGATE_MAX_UPLOAD_MB ?? 25)) * 1024 * 1024,
       plugins,

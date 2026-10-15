@@ -19,6 +19,8 @@ export interface RouterDeps {
   privacy?: PrivacyConfig;
   /** Measured model quality, used to order models inside a tier. */
   scoring?: Scoring;
+  /** Internal best-effort calls (e.g. semantic-cache embeddings): 5xx/network failures do not rest the key. */
+  softFail?: boolean;
   /** Where limits reported by providers are remembered. */
   observedLimits?: ObservedLimits;
   /** Plugin-provided adapters for non-OpenAI-compatible providers, by name. */
@@ -227,7 +229,7 @@ export async function routeChat(
       } catch (err) {
         deps.onAttempt?.({ provider: provider.provider, model: model.id, startMs: attemptStart, endMs: attemptStart + (performance.now() - attemptT0), status: null });
         if (signal?.aborted) throw err;
-        pool.cooldown(key, 10_000);
+        if (!deps.softFail) pool.cooldown(key, 10_000);
         continue;
       }
       deps.onAttempt?.({ provider: provider.provider, model: model.id, startMs: attemptStart, endMs: attemptStart + (performance.now() - attemptT0), status: res.status });
@@ -243,7 +245,7 @@ export async function routeChat(
         continue;
       }
       if (res.status >= 500) {
-        pool.cooldown(key, 10_000);
+        if (!deps.softFail) pool.cooldown(key, 10_000);
         await res.body?.cancel();
         continue;
       }
