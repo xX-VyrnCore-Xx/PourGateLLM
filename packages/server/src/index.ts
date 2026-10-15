@@ -197,6 +197,7 @@ const server = serve(
       maxUploadBytes: Math.max(1, Number(process.env.POURGATE_MAX_UPLOAD_MB ?? 25)) * 1024 * 1024,
       plugins,
       profiles,
+      fusionPanel: Math.min(5, Math.max(2, Number(process.env.POURGATE_FUSION_PANEL ?? 3))),
       breaker: new Breaker({ threshold: Math.max(1, Number(process.env.POURGATE_BREAKER_THRESHOLD ?? 5)) }),
       upstreamTimeoutMs: Math.max(1000, Number(process.env.POURGATE_UPSTREAM_TIMEOUT_MS ?? 60_000)),
       tracer,

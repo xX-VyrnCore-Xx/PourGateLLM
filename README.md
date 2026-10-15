@@ -277,6 +277,12 @@ codex --model auto          # Codex CLI through the gateway
 
 **Sticky sessions**: send `x-pourgate-session: <any id>` and follow-up turns of that conversation go back to the model that answered last (for `auto`, `auto:<tier>` and profiles) for 30 minutes, as long as it is still available. This keeps tone and tool-call behaviour consistent across a long chat. Sessions are scoped to the calling token, so ids never leak between clients.
 
+## 🧬 Fusion
+
+`"model": "fusion"` asks a **panel** of different models the same question in parallel (strongest tier first, one per provider, no two of the same family), then a judge model writes one answer from the drafts. If only one model answers you get its draft; if the judge fails you get the first draft; with no answer at all you get a 503. The panel size is `POURGATE_FUSION_PANEL` (2-5, default 3).
+
+It spends **panel size + 1** free requests per call, so use it for questions where quality matters. Tools are not supported (use a profile). Streaming works but the answer arrives in one piece once the judge is done. Response headers `x-pourgate-fusion` and `x-pourgate-fusion-panel` show what ran.
+
 ## 🧠 Complexity routing
 
 `"model": "auto"` looks at each request and decides how much model it deserves, **without spending any provider quota** (it is a small deterministic classifier, not another LLM call).
@@ -393,6 +399,8 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_DB` | `data/pourgate.db` | SQLite database path. |
 | `PORT` | `3000` | HTTP port. |
 | `POURGATE_ROUTING_STRATEGY` | `spread` | How models are ordered inside a tier: `spread` (least used first), `balanced`, `quality` or `speed` (use measured scores). |
+| `POURGATE_FUSION_PANEL` | `3` | Models asked by the `fusion` virtual model (2-5). |
+| `POURGATE_PROFILES_FILE` | `profiles.yaml` | Named fallback chains (`auto:<name>`). |
 | `POURGATE_EVAL_HOURS` | `0` (off) | Run the evals automatically every N hours (they consume free-tier quota). |
 | `POURGATE_EVAL_TASKS` | `4` | Tasks per model per run, rotating through the suite. |
 | `POURGATE_EVALS_FILE` | `evals/suite.json` | The eval suite. |

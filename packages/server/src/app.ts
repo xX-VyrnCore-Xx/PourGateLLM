@@ -72,6 +72,8 @@ export interface AppOptions {
   breaker?: Breaker;
   /** Remembers how fast each target answers so quicker ones are preferred (a default one is created when omitted). */
   latency?: LatencyTracker;
+  /** Models asked by the `fusion` virtual model (default 3). */
+  fusionPanel?: number;
   /** Named fallback chains, requested as `auto:<name>`. */
   profiles?: Profiles;
   /** Keeps a conversation (header `x-pourgate-session`) on the model that served it last. */
@@ -239,7 +241,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
 
   app.get('/v1/models', (c) => {
     const data = [
-      ...[...VIRTUAL_MODELS, ...(opts.profiles?.names().map((n) => `auto:${n}`) ?? [])].map((id) => ({ id, object: 'model', created: 0, owned_by: 'pourgate' })),
+      ...[...VIRTUAL_MODELS, 'fusion', ...(opts.profiles?.names().map((n) => `auto:${n}`) ?? [])].map((id) => ({ id, object: 'model', created: 0, owned_by: 'pourgate' })),
       ...getRegistry().flatMap((p) =>
         p.models.map((m) => ({ id: m.id, object: 'model', created: 0, owned_by: p.provider })),
       ),
@@ -496,6 +498,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         breaker,
         latency,
         profiles: opts.profiles,
+        fusionPanel: opts.fusionPanel,
         sticky,
         sessionKey: sessionKeyOf(c),
         timeoutMs: opts.upstreamTimeoutMs,

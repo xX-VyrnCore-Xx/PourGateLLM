@@ -5,6 +5,7 @@ import { rankScore, type ModelScore, type Strategy } from './evals.js';
 import { KeyPool } from './keypool.js';
 import type { LatencyTracker } from './latency.js';
 import type { Profiles, StickyStore } from './profiles.js';
+import { FUSION_MODEL, runFusion } from './fusion.js';
 import { exhaustedFor, parseRateLimitHeaders, type ObservedLimits } from './ratelimits.js';
 import type { ProviderAdapter } from './plugins.js';
 import { DEFAULT_PRIVACY, needsRedaction, providerAllowed, redactBody, redactTextFields, type PrivacyConfig } from './privacy.js';
@@ -32,6 +33,8 @@ export interface RouterDeps {
   breaker?: Breaker;
   /** Learns how fast each target answers; faster ones go first among otherwise equal candidates. */
   latency?: LatencyTracker;
+  /** Number of models asked by the `fusion` virtual model (default 3, max 5). */
+  fusionPanel?: number;
   /** Named fallback chains (`auto:<name>`). */
   profiles?: Profiles;
   /** With `sessionKey`: keeps a conversation on the model that served it last, for virtual models and profiles. */
@@ -160,6 +163,7 @@ export async function routeChat(
   form?: FormData,
 ): Promise<Response> {
   const privacy = deps.privacy ?? DEFAULT_PRIVACY;
+  if (endpoint === 'chat' && requested === FUSION_MODEL && !form) return runFusion(deps, body, routeChat, deps.fusionPanel ?? 3, signal);
   const profile = endpoint === 'chat' ? deps.profiles?.profileFor(requested) : undefined;
   let candidates = profile ? deps.profiles!.resolve(deps.registry, profile) : listCandidates(deps.registry, requested, endpoint);
   if (candidates.length > 0) {
