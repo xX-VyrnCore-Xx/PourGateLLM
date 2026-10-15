@@ -2,6 +2,7 @@ import type { AuditLog } from './audit.js';
 import { Breaker } from './breaker.js';
 import { LatencyTracker } from './latency.js';
 import type { CustomProviders } from './customproviders.js';
+import { compressPayload, type CompressionOptions } from './compress.js';
 import { handleBody, type McpBackend } from './mcp.js';
 import { NativeBadRequest, estimateTokens, geminiError, geminiModelEntry, geminiToChat, mapGeminiModel, ollamaChatToChat, ollamaTag, wrapGemini, wrapGeminiError, wrapOllama } from './native-apis.js';
 import { Profiles, StickyStore } from './profiles.js';
@@ -79,6 +80,8 @@ export interface AppOptions {
   customProviders?: CustomProviders;
   onCustomChange?: () => void;
   reservedNames?: () => Set<string>;
+  /** Optional prompt compression (off by default). */
+  compression?: CompressionOptions;
   /** Serve the Ollama-compatible API (`/api/chat`, `/api/generate`, `/api/tags`) for Zed, JetBrains, Open WebUI... */
   ollama?: boolean;
   /** Models asked by the `fusion` virtual model (default 3). */
@@ -326,6 +329,14 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
       return errorResponse(400, "'model' and a non-empty 'prompt' are required", 'invalid_request_error');
     }
 
+    // Opt-in prompt compression, before plugins, cache and routing see the request.
+    let compressedChars = 0;
+    if (endpoint === 'chat' && opts.compression && opts.compression.mode !== 'off') {
+      const r = compressPayload(payload, opts.compression);
+      payload = r.payload;
+      compressedChars = r.saved;
+    }
+
     const principal = c.get('principal');
     let clientId: number | undefined;
     if (principal.kind === 'client') {
@@ -367,6 +378,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     const spanId = newSpanId();
     const tag = (r: Response): Response => {
       if (tracer) r.headers.set('x-pourgate-trace-id', traceId);
+      if (compressedChars > 0) r.headers.set('x-pourgate-compressed', String(compressedChars));
       return r;
     };
     const route = ROUTES[endpoint];

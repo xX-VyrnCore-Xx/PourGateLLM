@@ -20,6 +20,7 @@ import { ObservedLimits } from './ratelimits.js';
 import { AuditLog } from './audit.js';
 import { Breaker } from './breaker.js';
 import { loadProfiles } from './profiles.js';
+import { parseCompression } from './compress.js';
 import { CustomProviders } from './customproviders.js';
 import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
@@ -204,6 +205,7 @@ const server = serve(
       onCustomChange: () => manager.setOverrides([...fileOverrides, ...customProviders.entries()]),
       reservedNames: () => new Set([...baseRegistry, ...fileOverrides].map((p) => p.provider)),
       profiles,
+      compression: { mode: parseCompression(process.env.POURGATE_COMPRESSION) },
       ollama: ['1', 'true', 'yes'].includes((process.env.POURGATE_OLLAMA_API ?? '').toLowerCase()),
       fusionPanel: Math.min(5, Math.max(2, Number(process.env.POURGATE_FUSION_PANEL ?? 3))),
       breaker: new Breaker({ threshold: Math.max(1, Number(process.env.POURGATE_BREAKER_THRESHOLD ?? 5)) }),

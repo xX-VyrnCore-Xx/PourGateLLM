@@ -32,5 +32,5 @@ Open, signed, self-updating registry (no paid catalog); per-client tokens with q
 | MCP server | **done** (`/mcp`: chat, list_models, provider_status; no resources/prompts, no SSE stream) |
 | Native Gemini and Ollama API surfaces | **done** (text, images, tools, streaming; no embeddings, no model management) |
 | Keyless providers (Kilo anonymous, OVH, AI Horde) | **done** for Kilo and OVH (real request verified); AI Horde needs its own queue adapter, not implemented |
-| Prompt compression pipeline | not implemented |
+| Prompt compression pipeline | **done**, simpler (whitespace, JSON, duplicates, long tool output, optional history trimming; no semantic dedupe) |
 | macOS / mobile apps | Windows app only |

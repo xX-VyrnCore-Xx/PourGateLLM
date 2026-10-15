@@ -271,6 +271,10 @@ export OPENAI_BASE_URL=http://localhost:3000/v1 OPENAI_API_KEY=<your token>
 codex --model auto          # Codex CLI through the gateway
 ```
 
+## 🗜️ Prompt compression (opt-in)
+
+`POURGATE_COMPRESSION=light` trims what a model never needs verbatim, so each request uses fewer free tokens: blank-line runs and trailing spaces outside code blocks, JSON-only messages (minified), exact duplicate consecutive messages and very long tool outputs (head and tail kept, `[… N characters omitted …]` in the middle). `aggressive` also replaces the oldest turns with a one-line marker once the history exceeds ~24,000 characters, always keeping system prompts and the latest 6 messages (and never separating a tool result from its call). The last user message, system prompts, tool-call structure and fenced code are never touched, and any error falls back to the original. Responses carry `x-pourgate-compressed: <characters saved>`. Compression happens before the cache, so compressed and original prompts share cache entries. Off by default because dropping history can change answers.
+
 ## 🧭 Gemini and Ollama native APIs
 
 - **Gemini** (always on): `POST /v1beta/models/{model}:generateContent`, `:streamGenerateContent?alt=sse`, `:countTokens`, `GET /v1beta/models`. Point Gemini CLI or a Google SDK at the gateway (`GOOGLE_GEMINI_BASE_URL=http://localhost:3000`) and use a client token as the API key (`x-goog-api-key`, `?key=` or `Authorization: Bearer`). Text, images, function calling, JSON mode and streaming work; a Gemini model name the registry does not know (`gemini-2.5-pro` / `flash` / `flash-lite`) maps to `auto:large` / `auto:medium` / `auto:small`. `countTokens` is an estimate (about 4 characters per token). Not supported: `embedContent`, file uploads, caching, safety settings.
@@ -423,6 +427,7 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `POURGATE_DB` | `data/pourgate.db` | SQLite database path. |
 | `PORT` | `3000` | HTTP port. |
 | `POURGATE_ROUTING_STRATEGY` | `spread` | How models are ordered inside a tier: `spread` (least used first), `balanced`, `quality` or `speed` (use measured scores). |
+| `POURGATE_COMPRESSION` | `off` | `light` or `aggressive` prompt compression. |
 | `POURGATE_OLLAMA_API` | off | Serve the Ollama-compatible API under `/api`. |
 | `POURGATE_FUSION_PANEL` | `3` | Models asked by the `fusion` virtual model (2-5). |
 | `POURGATE_PROFILES_FILE` | `profiles.yaml` | Named fallback chains (`auto:<name>`). |
