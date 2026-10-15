@@ -29,6 +29,10 @@ updates:
     groups:
       actions-minor-patch:
         update-types: ['minor', 'patch']
+    ignore:
+      # Major bumps of release actions can only be proven by a real release: done by hand, so no branch lingers.
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: docker
     directory: '/'
@@ -38,7 +42,7 @@ updates:
       prefix: 'docker'
     ignore:
       # The runtime needs Node 22.13+ with node:sqlite; moving to another major is a deliberate decision.
-      - dependency-name: node
+      - dependency-name: '*'
         update-types: ['version-update:semver-major']
 
   - package-ecosystem: cargo
