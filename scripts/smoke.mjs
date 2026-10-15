@@ -54,6 +54,7 @@ models:
     capabilities: [chat]
 `,
 );
+writeFileSync(join(work, 'profiles.yaml'), 'smoke:\n  - fake-large\n  - fake-small\n');
 const port = 20000 + Math.floor(Math.random() * 20000);
 const base = `http://127.0.0.1:${port}`;
 const gateway = spawn(process.execPath, ['--no-warnings', server], {
@@ -69,6 +70,7 @@ const gateway = spawn(process.execPath, ['--no-warnings', server], {
     POURGATE_CACHE_TTL_SECONDS: '60',
     POURGATE_CACHE_MODE: 'all',
     POURGATE_METRICS_TOKEN: 'metrics-secret',
+    POURGATE_PROFILES_FILE: join(work, 'profiles.yaml'),
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -146,6 +148,32 @@ try {
     const text = await res.text();
     assert(res.headers.get('content-type')?.includes('text/event-stream'), 'not an event stream');
     assert(text.includes('pon') && text.includes('[DONE]'), 'missing chunks');
+  });
+  await step('/v1/completions and /v1/responses work, including streaming', async () => {
+    const h = { 'content-type': 'application/json', authorization: 'Bearer pg-smoke' };
+    const comp = await (await fetch(`${base}/v1/completions`, { method: 'POST', headers: h, body: JSON.stringify({ model: 'fake-large', prompt: 'ping', max_tokens: 5 }) })).json();
+    assert(comp.object === 'text_completion' && comp.choices[0].text === 'pong', `completions ${JSON.stringify(comp)}`);
+    const resp = await (await fetch(`${base}/v1/responses`, { method: 'POST', headers: h, body: JSON.stringify({ model: 'fake-large', input: 'ping uniq-1' }) })).json();
+    assert(resp.object === 'response' && resp.output[0].content[0].text === 'pong', `responses ${JSON.stringify(resp)}`);
+    const streamed = await (await fetch(`${base}/v1/responses`, { method: 'POST', headers: h, body: JSON.stringify({ model: 'fake-small', input: 'stream uniq-2', stream: true }) })).text();
+    assert(streamed.includes('response.output_text.delta') && streamed.includes('response.completed') && streamed.includes('pong'), 'responses stream incomplete');
+  });
+  await step('profiles route in the configured order and fusion merges a panel', async () => {
+    const res = await chat({ model: 'auto:smoke', messages: [{ role: 'user', content: 'profile uniq-3' }] });
+    assert(res.status === 200 && res.headers.get('x-pourgate-model') === 'fake-large', `profile served by ${res.headers.get('x-pourgate-model')}`);
+    const fusion = await chat({ model: 'fusion', messages: [{ role: 'user', content: 'fusion uniq-4' }] });
+    assert(fusion.status === 200 && fusion.headers.get('x-pourgate-fusion')?.includes('judge'), `fusion ${fusion.status} ${fusion.headers.get('x-pourgate-fusion')}`);
+  });
+  await step('a custom endpoint and pasted keys can be added from the dashboard API', async () => {
+    const login = await fetch(`${base}/admin/api/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'smoke-password-123' }) });
+    const cookie = login.headers.get('set-cookie').split(';')[0];
+    const api = (path, body) => fetch(`${base}/admin/api${path}`, { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify(body) });
+    const added = await api('/custom-providers', { name: 'mine', baseUrl: upstreamUrl, models: 'my-model' });
+    assert(added.status === 201, `custom provider ${added.status}`);
+    const keys = await (await api('/providers/mine/keys/bulk', { keys: 'custom-key-aaaa\ncustom-key-bbbb\ncustom-key-aaaa' })).json();
+    assert(keys.added === 2 && keys.skipped.length === 0, `bulk ${JSON.stringify(keys)}`);
+    const res = await chat({ model: 'my-model', messages: [{ role: 'user', content: 'custom uniq-5' }] });
+    assert(res.status === 200 && res.headers.get('x-pourgate-provider') === 'mine', `custom served by ${res.headers.get('x-pourgate-provider')}`);
   });
   await step('the dashboard is served', async () => {
     const res = await fetch(`${base}/`);

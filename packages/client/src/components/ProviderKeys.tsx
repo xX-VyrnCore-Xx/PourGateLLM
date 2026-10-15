@@ -20,6 +20,9 @@ export function ProviderKeys({ provider, onChanged, onUnauthorized }: Props) {
   const [weight, setWeight] = useState(1);
   const [results, setResults] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [many, setMany] = useState(false);
+  const [bulk, setBulk] = useState('');
+  const [bulkInfo, setBulkInfo] = useState<string | null>(null);
 
   const fail = useCallback(
     (err: unknown) => {
@@ -39,6 +42,21 @@ export function ProviderKeys({ provider, onChanged, onUnauthorized }: Props) {
       setKey('');
       setLabel('');
       setWeight(1);
+      await load();
+      onChanged();
+    } catch (err) {
+      fail(err);
+    }
+  }
+
+  async function addMany(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBulkInfo(null);
+    try {
+      const r = await api.addProviderKeys(provider, bulk, weight);
+      setBulkInfo(`${r.added} ${t('bulkResult')}${r.skipped.length ? ` · ${r.skipped.length} ${t('bulkSkipped')}: ${r.skipped.slice(0, 3).map((x) => `${x.key} ${x.reason}`).join('; ')}` : ''}`);
+      if (r.added > 0) setBulk('');
       await load();
       onChanged();
     } catch (err) {
@@ -152,6 +170,27 @@ export function ProviderKeys({ provider, onChanged, onUnauthorized }: Props) {
           {t('addKey')}
         </Button>
       </form>
+      <button type="button" className="mt-2 text-xs text-accent underline-offset-2 hover:underline" onClick={() => setMany((v) => !v)} aria-expanded={many}>
+        {t('pasteMany')}
+      </button>
+      {many && (
+        <form onSubmit={addMany} className="mt-2 space-y-2">
+          <p className="text-xs text-muted">{t('pasteManyHint')}</p>
+          <textarea
+            aria-label={`${t('pasteMany')} ${provider}`}
+            autoComplete="off"
+            spellCheck={false}
+            rows={4}
+            value={bulk}
+            onChange={(e) => setBulk(e.target.value)}
+            className="w-full rounded-lg border border-border bg-transparent p-2 font-mono text-xs"
+          />
+          <Button type="submit" disabled={bulk.trim().length < 8}>
+            {t('addKeys')}
+          </Button>
+          {bulkInfo && <p role="status" className="text-xs">{bulkInfo}</p>}
+        </form>
+      )}
       {error && (
         <p role="alert" className="mt-2 text-xs text-red-600">
           {error}

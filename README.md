@@ -271,6 +271,11 @@ export OPENAI_BASE_URL=http://localhost:3000/v1 OPENAI_API_KEY=<your token>
 codex --model auto          # Codex CLI through the gateway
 ```
 
+## 🔌 Your own endpoints and many keys
+
+- **Providers → Your own endpoints**: add any OpenAI-compatible server (Ollama, llama.cpp, LM Studio, vLLM, another gateway) by name and base URL. Leave the model list empty and the gateway asks the server (`GET /models`) which models it has. Then add a key under the new provider; servers that need none accept any placeholder of 8+ characters. The endpoint takes part in routing, failover, limits and the audit log like any other provider, and survives restarts (stored in the database). Name collisions with shipped providers are refused; removing an endpoint deletes its stored keys.
+- **Paste many keys**: under each provider, "Paste many keys" takes one key per line (commas and spaces work too, up to 500 at once). Duplicates and malformed keys are skipped and reported by their last 4 characters only.
+
 ## 🔗 Profiles and sticky sessions
 
 **Profiles** are named fallback chains you control. Put them in `profiles.yaml` (see [examples/profiles.yaml](examples/profiles.yaml); path from `POURGATE_PROFILES_FILE`) and request one as `"model": "auto:coding"`. The gateway tries the chain in your order, skipping models that cannot serve the request (missing tools/vision, prompt longer than the context window) and failing over on rate limits and errors. Profiles appear in `/v1/models`.

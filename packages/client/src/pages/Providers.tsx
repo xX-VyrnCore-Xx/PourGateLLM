@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { CustomProviders } from '../components/CustomProviders';
 import { ModelQuality } from '../components/ModelQuality';
 import { ProviderKeys } from '../components/ProviderKeys';
 import { Button } from '../components/ui/button';
@@ -61,6 +62,7 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
           )}
         </div>
       </Card>
+      <CustomProviders onChanged={load} onUnauthorized={onUnauthorized} />
       {rows.map((p) => (
         <Card key={p.provider}>
           <div className="mb-2 flex items-center justify-between">
