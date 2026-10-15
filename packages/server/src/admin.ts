@@ -243,13 +243,24 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     if (!Array.isArray(b.messages) || b.messages.length === 0 || b.messages.length > 50) {
       return c.json({ error: "'messages' must be a non-empty array (max 50)" }, 400);
     }
+    const wantStream = b.stream === true;
     const started = now();
     const res = await opts.playground({
       model: b.model,
       messages: b.messages,
       max_tokens: Math.min(1024, Math.max(1, Number(b.max_tokens) || 512)),
-      stream: false,
+      stream: wantStream,
     });
+    opts.audit?.record('playground', { ip: clientIp(c), target: b.model });
+    // Streamed answer: pass the SSE body straight through; the route comes back in the headers.
+    if (wantStream && res.ok && (res.headers.get('content-type') ?? '').includes('text/event-stream')) {
+      const headers = new Headers({ 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
+      for (const name of ['provider', 'model', 'tier', 'complexity', 'cache']) {
+        const v = res.headers.get(`x-pourgate-${name}`);
+        if (v) headers.set(`x-pourgate-${name}`, v);
+      }
+      return new Response(res.body, { status: 200, headers });
+    }
     const data = (await res.json().catch(() => null)) as {
       choices?: { message?: { content?: unknown } }[];
       usage?: { total_tokens?: number };
@@ -257,7 +268,6 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     } | null;
     const h = (name: string) => res.headers.get(name);
     const content = data?.choices?.[0]?.message?.content;
-    opts.audit?.record('playground', { ip: clientIp(c), target: b.model });
     return c.json({
       ok: res.ok,
       status: res.status,

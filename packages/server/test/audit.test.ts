@@ -101,3 +101,22 @@ describe('playground', () => {
     expect((await app.request('/v1/chat/completions', { method: 'POST', headers: { ...json, authorization: 'Bearer guess' }, body: '{}' })).status).toBe(401);
   });
 });
+
+describe('playground streaming', () => {
+  it('passes the SSE stream through with route headers', async () => {
+    const db = openDatabase(':memory:');
+    const sse = 'data: {"choices":[{"delta":{"content":"he"}}]}\n\ndata: {"choices":[{"delta":{"content":"llo"}}]}\n\ndata: [DONE]\n\n';
+    const seen: { stream?: boolean }[] = [];
+    const fetcher = (async (_u: unknown, init?: RequestInit) => {
+      seen.push(JSON.parse(String(init?.body)));
+      return new Response(sse, { headers: { 'content-type': 'text/event-stream' } });
+    }) as typeof fetch;
+    const app = createApp({ registry, store: new TokenStore(db), pools: new Map([['groq', new KeyPool(['secret-key-1'])]]), adminPassword: 'hunter2', fetch: fetcher });
+    const cookie = (await login(app)).headers.get('set-cookie')!.split(';')[0]!;
+    const res = await app.request('/admin/api/playground', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ model: 'auto', stream: true, messages: [{ role: 'user', content: 'hi' }] }) });
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    expect(res.headers.get('x-pourgate-model')).toBe('m1');
+    expect(await res.text()).toBe(sse);
+    expect(seen[0]!.stream).toBe(true);
+  });
+});

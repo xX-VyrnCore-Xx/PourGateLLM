@@ -129,8 +129,68 @@ export const api = {
   cache: () => request<{ enabled: boolean; mode?: string; entries?: number; hits?: number; bytes?: number }>('/cache'),
   clearCache: () => request<{ cleared: number }>('/cache', { method: 'DELETE' }),
   analytics: (range: string) => request<Analytics>(`/analytics?range=${encodeURIComponent(range)}`),
-  playground: (model: string, messages: { role: string; content: string }[]) =>
-    request<PlaygroundResult>('/playground', { method: 'POST', body: JSON.stringify({ model, messages }) }),
+  /** Streams a playground answer; resolves with the route headers once the stream ends. */
+  async playgroundStream(
+    model: string,
+    messages: { role: string; content: string }[],
+    onDelta: (text: string) => void,
+    signal?: AbortSignal,
+  ): Promise<PlaygroundResult> {
+    const started = Date.now();
+    const res = await fetch('/admin/api/playground', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ model, messages, stream: true }),
+      signal,
+    });
+    if (res.status === 401) throw new ApiError(401, 'unauthorized');
+    // Cache hits and errors come back as plain JSON.
+    if (!(res.headers.get('content-type') ?? '').includes('text/event-stream') || !res.body) {
+      const json = (await res.json().catch(() => null)) as PlaygroundResult | { error?: string } | null;
+      if (json && 'route' in json) {
+        if (json.content) onDelta(json.content);
+        return json;
+      }
+      throw new ApiError(res.status, (json as { error?: string } | null)?.error ?? res.statusText);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let content = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const delta = (JSON.parse(data) as { choices?: { delta?: { content?: unknown } }[] }).choices?.[0]?.delta?.content;
+          if (typeof delta === 'string' && delta) {
+            content += delta;
+            onDelta(delta);
+          }
+        } catch {
+          // ignore keep-alives / non-JSON lines
+        }
+      }
+    }
+    const h = (n: string) => res.headers.get(`x-pourgate-${n}`);
+    return {
+      ok: true,
+      status: 200,
+      content,
+      error: null,
+      tokens: null,
+      elapsedMs: Date.now() - started,
+      route: { provider: h('provider'), model: h('model'), tier: h('tier'), complexity: h('complexity'), cache: h('cache') },
+    };
+  },
   audit: () => request<AuditRow[]>('/audit?limit=200'),
   registry: () => request<RegistryStatus | null>('/registry'),
   syncRegistry: () => request<RegistryStatus>('/registry/sync', { method: 'POST' }),
