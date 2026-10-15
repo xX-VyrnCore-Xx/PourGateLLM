@@ -137,6 +137,10 @@ export const api = {
   addCustomProvider: (body: { name: string; baseUrl: string; models?: string; apiKey?: string }) =>
     request<CustomProviderRow & { detected: boolean }>('/custom-providers', { method: 'POST', body: JSON.stringify(body) }),
   removeCustomProvider: (name: string) => request<void>(`/custom-providers/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  profiles: () => request<ProfileRow[]>('/profiles'),
+  saveProfile: (name: string, chain: { model: string; provider?: string }[]) =>
+    request<ProfileRow>(`/profiles/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ chain }) }),
+  deleteProfile: (name: string) => request<void>(`/profiles/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   removeProviderKey: (id: number) => request<void>(`/provider-keys/${id}`, { method: 'DELETE' }),
   testProviderKey: (id: number) =>
     request<{ ok: boolean; status: number | null }>(`/provider-keys/${id}/test`, { method: 'POST' }),
@@ -219,4 +223,10 @@ export interface CustomProviderRow {
   models: string[];
   envName: string;
   keys: number;
+}
+
+export interface ProfileRow {
+  name: string;
+  chain: { model: string; provider?: string }[];
+  resolved?: number;
 }

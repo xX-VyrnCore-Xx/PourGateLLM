@@ -117,3 +117,56 @@ describe('profiles through the gateway', () => {
     expect((await chat('auto:nope')).status).toBe(404);
   });
 });
+
+describe('profile editing from the dashboard', () => {
+  async function adminSetup() {
+    const { mkdtempSync, readFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const file = join(mkdtempSync(join(tmpdir(), 'prof-')), 'profiles.yaml');
+    const profiles = new Profiles();
+    const app = createApp({
+      registry,
+      store: new TokenStore(openDatabase(':memory:')),
+      envTokens: ['pg'],
+      pools: new Map([['a', new KeyPool(['key-aaaaaaaa'])], ['b', new KeyPool(['key-bbbbbbbb'])]]),
+      fetch: (async () => Response.json({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] })) as typeof fetch,
+      adminPassword: 'hunter2-long-enough',
+      profiles,
+      onProfilesChange: () => profiles.save(file),
+    });
+    const cookie = (await app.request('/admin/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'hunter2-long-enough' }) })).headers.get('set-cookie')!.split(';')[0]!;
+    const call = (path: string, method: string, body?: unknown) => app.request(`/admin/api${path}`, { method, headers: { 'content-type': 'application/json', cookie }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { app, call, file, readFileSync, profiles };
+  }
+
+  it('creates, uses, replaces and deletes a profile, persisting it as YAML', async () => {
+    const { app, call, file, readFileSync } = await adminSetup();
+    const created = await call('/profiles/coding', 'PUT', { chain: ['mid', { model: 'big', provider: 'a' }] });
+    expect(created.status).toBe(201);
+    expect(readFileSync(file, 'utf8')).toContain('coding:');
+    expect(parseProfiles(readFileSync(file, 'utf8')).chain('coding')).toEqual([{ model: 'mid' }, { provider: 'a', model: 'big' }]);
+    const listed = (await (await call('/profiles', 'GET')).json()) as { name: string; resolved: number }[];
+    expect(listed).toEqual([expect.objectContaining({ name: 'coding', resolved: 2 })]);
+    // the new profile works immediately, without a restart
+    const chat = await app.request('/v1/chat/completions', { method: 'POST', headers: { authorization: 'Bearer pg', 'content-type': 'application/json' }, body: JSON.stringify({ model: 'auto:coding', messages: [{ role: 'user', content: 'x' }] }) });
+    expect(chat.headers.get('x-pourgate-model')).toBe('mid');
+    expect((await call('/profiles/coding', 'PUT', { chain: ['big'] })).status).toBe(200);
+    expect((await call('/profiles/coding', 'DELETE')).status).toBe(204);
+    expect(readFileSync(file, 'utf8')).not.toContain('coding:');
+    expect((await call('/profiles/coding', 'DELETE')).status).toBe(404);
+  });
+
+  it('rejects bad names, unknown models and malformed chains, and needs a session', async () => {
+    const { app, call } = await adminSetup();
+    expect((await call('/profiles/Bad Name', 'PUT', { chain: ['mid'] })).status).toBe(400);
+    expect((await call('/profiles/small', 'PUT', { chain: ['mid'] })).status).toBe(400);
+    const unknown = await call('/profiles/ok', 'PUT', { chain: ['nope'] });
+    expect(unknown.status).toBe(400);
+    expect(((await unknown.json()) as { error: string }).error).toMatch(/no chat model "nope"/);
+    expect((await call('/profiles/ok', 'PUT', { chain: [{ model: 'mid', provider: 'zzz' }] })).status).toBe(400);
+    expect((await call('/profiles/ok', 'PUT', { chain: [] })).status).toBe(400);
+    expect((await call('/profiles/ok', 'PUT', {})).status).toBe(400);
+    expect((await app.request('/admin/api/profiles')).status).toBe(401);
+  });
+});

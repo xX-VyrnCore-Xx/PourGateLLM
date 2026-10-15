@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { FallbackProfiles } from '../components/FallbackProfiles';
 import { CustomProviders } from '../components/CustomProviders';
 import { ModelQuality } from '../components/ModelQuality';
 import { ProviderKeys } from '../components/ProviderKeys';
@@ -62,6 +63,7 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
           )}
         </div>
       </Card>
+      <FallbackProfiles onUnauthorized={onUnauthorized} />
       <CustomProviders onChanged={load} onUnauthorized={onUnauthorized} />
       {rows.map((p) => (
         <Card key={p.provider}>

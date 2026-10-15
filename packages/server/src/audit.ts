@@ -14,6 +14,8 @@ export type AuditAction =
   | 'provider_key_bulk_add'
   | 'custom_provider_add'
   | 'custom_provider_remove'
+  | 'profile_save'
+  | 'profile_delete'
   | 'registry_sync'
   | 'cache_clear'
   | 'eval_run'

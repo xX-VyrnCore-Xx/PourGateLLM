@@ -301,7 +301,7 @@ Providers marked `keyless: true` in the registry work out of the box: **Kilo** (
 
 ## 🔗 Profiles and sticky sessions
 
-**Profiles** are named fallback chains you control. Put them in `profiles.yaml` (see [examples/profiles.yaml](examples/profiles.yaml); path from `POURGATE_PROFILES_FILE`) and request one as `"model": "auto:coding"`. The gateway tries the chain in your order, skipping models that cannot serve the request (missing tools/vision, prompt longer than the context window) and failing over on rate limits and errors. Profiles appear in `/v1/models`.
+**Profiles** are named fallback chains you control. Put them in `profiles.yaml` (see [examples/profiles.yaml](examples/profiles.yaml); path from `POURGATE_PROFILES_FILE`) and request one as `"model": "auto:coding"`. The gateway tries the chain in your order, skipping models that cannot serve the request (missing tools/vision, prompt longer than the context window) and failing over on rate limits and errors. Profiles appear in `/v1/models`. They can also be created, edited and deleted from the dashboard (**Providers → Fallback profiles**, one model per line, `model @provider` to pin a provider); changes apply immediately and are written back to the file (comments in a hand-edited file are not preserved).
 
 **Sticky sessions**: send `x-pourgate-session: <any id>` and follow-up turns of that conversation go back to the model that answered last (for `auto`, `auto:<tier>` and profiles) for 30 minutes, as long as it is still available. This keeps tone and tool-call behaviour consistent across a long chat. Sessions are scoped to the calling token, so ids never leak between clients.
 

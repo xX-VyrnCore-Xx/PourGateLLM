@@ -80,6 +80,8 @@ export interface AppOptions {
   customProviders?: CustomProviders;
   onCustomChange?: () => void;
   reservedNames?: () => Set<string>;
+  /** Persists profile changes made from the dashboard. */
+  onProfilesChange?: () => void;
   /** Optional prompt compression (off by default). */
   compression?: CompressionOptions;
   /** Serve the Ollama-compatible API (`/api/chat`, `/api/generate`, `/api/tags`) for Zed, JetBrains, Open WebUI... */
@@ -742,6 +744,8 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         keyStore: opts.keyStore,
         poolManager: opts.poolManager,
         customProviders: opts.customProviders,
+        profiles: opts.profiles,
+        onProfilesChange: opts.onProfilesChange,
         onCustomChange: opts.onCustomChange,
         reservedNames: opts.reservedNames,
         requestLog: opts.requestLog,

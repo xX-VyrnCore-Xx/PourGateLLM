@@ -26,7 +26,7 @@ Open, signed, self-updating registry (no paid catalog); per-client tokens with q
 |---|---|
 | `/v1/responses` (needed by Codex CLI) and `/v1/completions` (editor autocomplete) | **done** (text, tools, streaming; responses are not stored) |
 | "Fusion": fan out to several models and have a judge merge the answers | **done** (`"model": "fusion"`, no tools) |
-| Named fallback-chain profiles (`auto:<profile>`) and sticky sessions | **done** (file-based `profiles.yaml`, `x-pourgate-session` header; no dashboard editor yet) |
+| Named fallback-chain profiles (`auto:<profile>`) and sticky sessions | **done** (`profiles.yaml` or the dashboard editor, `x-pourgate-session` header) |
 | Dashboard form to add a custom OpenAI-compatible endpoint | **done** (model auto-detection, stored in the database) |
 | Bulk key import | **done** (paste many keys; no export, no periodic health check — the per-key test button exists) |
 | MCP server | **done** (`/mcp`: chat, list_models, provider_status; no resources/prompts, no SSE stream) |

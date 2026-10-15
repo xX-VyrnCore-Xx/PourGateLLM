@@ -205,6 +205,7 @@ const server = serve(
       onCustomChange: () => manager.setOverrides([...fileOverrides, ...customProviders.entries()]),
       reservedNames: () => new Set([...baseRegistry, ...fileOverrides].map((p) => p.provider)),
       profiles,
+      onProfilesChange: () => profiles.save(profilesFile),
       compression: { mode: parseCompression(process.env.POURGATE_COMPRESSION) },
       ollama: ['1', 'true', 'yes'].includes((process.env.POURGATE_OLLAMA_API ?? '').toLowerCase()),
       fusionPanel: Math.min(5, Math.max(2, Number(process.env.POURGATE_FUSION_PANEL ?? 3))),
