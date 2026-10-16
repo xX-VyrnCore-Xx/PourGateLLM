@@ -22,6 +22,9 @@ import { Breaker } from './breaker.js';
 import { loadProfiles } from './profiles.js';
 import { parseCompression } from './compress.js';
 import { CustomProviders } from './customproviders.js';
+import { HealthMonitor, postWebhook } from './health.js';
+import { UpdateChecker } from './update.js';
+import { VERSION } from './version.js';
 import { RequestLog } from './requestlog.js';
 import { TokenStore } from './tokens.js';
 import { SqliteUsage, makeFingerprint, pruneUsage } from './usage.js';
@@ -184,6 +187,31 @@ const profiles = (() => {
 })();
 if (profiles.names().length > 0) console.log(`Profiles: ${profiles.names().map((n) => `auto:${n}`).join(', ')}`);
 
+// Real provider status (opt-in background checks; the dashboard can always run one on demand) and the latest-release check.
+const alertWebhook = (() => {
+  const raw = process.env.POURGATE_ALERT_WEBHOOK?.trim();
+  if (!raw) return undefined;
+  try {
+    const u = new URL(raw);
+    if (u.protocol === 'https:' || u.protocol === 'http:') return u.toString();
+  } catch {
+    // fall through to the warning
+  }
+  console.warn('[health] POURGATE_ALERT_WEBHOOK is not a valid http(s) URL: alerts disabled');
+  return undefined;
+})();
+const health = new HealthMonitor({
+  registry: () => manager.entries,
+  pools: () => poolManager.pools,
+  onChange: (e) => {
+    console.warn(`[health] ${e.provider}: ${e.from} -> ${e.to}${e.detail ? ` (${e.detail})` : ''}`);
+    if (alertWebhook) void postWebhook(alertWebhook, e).catch(() => console.warn('[health] could not post the alert to the webhook'));
+  },
+});
+const healthMinutes = Number(process.env.POURGATE_HEALTH_MINUTES ?? 0);
+if (healthMinutes > 0) health.start(Math.max(15, healthMinutes) * 60_000);
+const update = new UpdateChecker({ current: VERSION, enabled: !/^(off|false|0|no)$/i.test(process.env.POURGATE_UPDATE_CHECK ?? '') });
+
 const port = Number(process.env.PORT ?? 3000);
 const server = serve(
   {
@@ -202,6 +230,8 @@ const server = serve(
       maxUploadBytes: Math.max(1, Number(process.env.POURGATE_MAX_UPLOAD_MB ?? 25)) * 1024 * 1024,
       plugins,
       customProviders,
+      update,
+      health,
       onCustomChange: () => manager.setOverrides([...fileOverrides, ...customProviders.entries()]),
       reservedNames: () => new Set([...baseRegistry, ...fileOverrides].map((p) => p.provider)),
       profiles,

@@ -89,6 +89,31 @@ export class TokenStore {
     return (this.db.prepare('SELECT * FROM api_tokens ORDER BY id').all() as unknown as Row[]).map(toRecord);
   }
 
+  /** Every token with its hash (never the plaintext), for backups. */
+  exportRows(): { name: string; tokenHash: string; prefix: string; rpmLimit: number | null; dailyRequestLimit: number | null; createdAt: number; expiresAt: number | null; revokedAt: number | null }[] {
+    return (this.db.prepare('SELECT * FROM api_tokens ORDER BY id').all() as unknown as (Row & { token_hash: string })[]).map((r) => ({
+      name: r.name,
+      tokenHash: r.token_hash,
+      prefix: r.prefix,
+      rpmLimit: r.rpm_limit,
+      dailyRequestLimit: r.daily_request_limit,
+      createdAt: r.created_at,
+      expiresAt: r.expires_at,
+      revokedAt: r.revoked_at,
+    }));
+  }
+
+  /** Adds a token from a backup unless its hash is already known. Returns whether it was added. */
+  importRow(r: { name: string; tokenHash: string; prefix: string; rpmLimit: number | null; dailyRequestLimit: number | null; createdAt: number; expiresAt: number | null; revokedAt: number | null }): boolean {
+    const res = this.db
+      .prepare(
+        `INSERT OR IGNORE INTO api_tokens (name, token_hash, prefix, rpm_limit, daily_request_limit, created_at, expires_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(r.name, r.tokenHash, r.prefix, r.rpmLimit, r.dailyRequestLimit, r.createdAt, r.expiresAt, r.revokedAt);
+    return Number(res.changes) > 0;
+  }
+
   count(): number {
     return (this.db.prepare('SELECT COUNT(*) AS n FROM api_tokens WHERE revoked_at IS NULL').get() as { n: number })
       .n;

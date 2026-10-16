@@ -17,7 +17,7 @@ export interface ProbeResult {
   detail?: string;
 }
 
-type Fetcher = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal }) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
+export type Fetcher = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal }) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
 
 /** Cheapest model likely to answer: smallest tier first, chat-capable only. */
 export function probeModel(entry: ProviderEntry): string | undefined {

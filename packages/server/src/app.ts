@@ -15,6 +15,9 @@ import { bodyLimit } from 'hono/body-limit';
 import { serveStatic } from '@hono/node-server/serve-static';
 import type { ProviderEntry } from '@pourgate/shared';
 import { createAdminRoutes, type RegistrySyncHandle } from './admin.js';
+import type { HealthMonitor } from './health.js';
+import type { UpdateChecker } from './update.js';
+import { VERSION } from './version.js';
 import type { KeyStore } from './keys.js';
 import { anthropicError, estimateInputTokens, toOpenAIRequest, validateRequest, wrapResponse } from './anthropic.js';
 import type { CacheResult, CachedResponse, ResponseCache } from './cache.js';
@@ -79,6 +82,9 @@ export interface AppOptions {
   /** Dashboard-defined OpenAI-compatible endpoints (admin only). */
   customProviders?: CustomProviders;
   onCustomChange?: () => void;
+  /** Latest-release check and real provider status shown in the dashboard. */
+  update?: UpdateChecker;
+  health?: HealthMonitor;
   reservedNames?: () => Set<string>;
   /** Persists profile changes made from the dashboard. */
   onProfilesChange?: () => void;
@@ -219,10 +225,10 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   // Gemini (/v1beta) and the optional Ollama API (/api) are gateway surfaces too: same limits, same authentication.
   const gatewayPatterns = ['/v1/*', '/v1beta/*', ...(opts.ollama ? ['/api/*'] : [])];
   for (const pattern of gatewayPatterns) app.use(pattern, (c, next) => (c.req.path === '/v1/audio/transcriptions' ? uploadLimit(c, next) : jsonLimit(c, next)));
-  app.use(
-    '/admin/api/*',
-    bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: 'request body is too large' }, 413) }),
-  );
+  const adminLimit = (maxSize: number) => bodyLimit({ maxSize, onError: (c) => c.json({ error: 'request body is too large' }, 413) });
+  const adminSmall = adminLimit(64 * 1024);
+  const adminRestore = adminLimit(8 * 1024 * 1024); // an encrypted backup of a large setup
+  app.use('/admin/api/*', (c, next) => (c.req.path === '/admin/api/restore' ? adminRestore(c, next) : adminSmall(c, next)));
 
   const gatewayAuth = async (c: Context<{ Variables: { principal: Principal } }>, next: () => Promise<void>) => {
     const header = c.req.header('authorization') ?? '';
@@ -625,7 +631,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
   app.post('/v1/mcp', async (c) => {
     const auth = c.req.header('authorization') ?? (c.req.header('x-api-key') ? `Bearer ${c.req.header('x-api-key')}` : '');
     const backend: McpBackend = {
-      version: process.env.POURGATE_VERSION ?? 'dev',
+      version: VERSION,
       models: () => [...VIRTUAL_MODELS, 'fusion', ...(opts.profiles?.names().map((n) => `auto:${n}`) ?? []), ...new Set(getRegistry().flatMap((p) => p.models.filter((m) => m.capabilities.includes('chat')).map((m) => m.id)))],
       providers: () => getRegistry().map((p) => ({ provider: p.provider, enabled: opts.pools.has(p.provider), models: p.models.length, keyless: p.keyless === true })),
       chat: async (body) => {
@@ -703,7 +709,7 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
     app.post('/api/chat', ollamaCall(false));
     app.post('/api/generate', ollamaCall(true));
     app.get('/api/tags', (c) => c.json({ models: [...new Set(getRegistry().flatMap((p) => p.models.filter((m) => m.capabilities.includes('chat')).map((m) => m.id)))].concat(['auto', 'fusion']).map(ollamaTag) }));
-    app.get('/api/version', (c) => c.json({ version: '0.6.0' }));
+    app.get('/api/version', (c) => c.json({ version: /^\d+\.\d+\.\d+/.test(VERSION) ? VERSION : '0.6.0' }));
     app.post('/api/show', async (c) => {
       const b = (await c.req.json().catch(() => null)) as { model?: string; name?: string } | null;
       const id = b?.model ?? b?.name;
@@ -744,6 +750,8 @@ export function createApp(opts: AppOptions): Hono<{ Variables: { principal: Prin
         keyStore: opts.keyStore,
         poolManager: opts.poolManager,
         customProviders: opts.customProviders,
+        update: opts.update,
+        health: opts.health,
         profiles: opts.profiles,
         onProfilesChange: opts.onProfilesChange,
         onCustomChange: opts.onCustomChange,

@@ -1,0 +1,58 @@
+# Weekly: re-reads each provider's own list of free models (providers whose list is public, or whose key is stored as a
+# repository secret), and opens a pull request when something changed. The pull request runs the normal CI and is
+# merged automatically once it is green. Only files under registry/ are ever touched.
+name: Registry refresh
+on:
+  schedule:
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: registry-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Regenerate the discovered provider files
+        env:
+          POURGATE_REGISTRY_DIR: ${{ github.workspace }}/registry
+        run: pnpm --filter ./packages/server --silent cli registry discover --write
+      - name: Open a pull request when something changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          if [ -z "$(git status --porcelain -- registry)" ]; then echo "Registry is up to date."; exit 0; fi
+          # Never let a refresh touch anything but the registry.
+          if [ -n "$(git status --porcelain | grep -v ' registry/')" ]; then echo "Unexpected changes outside registry/" >&2; git status --short >&2; exit 1; fi
+          git diff --stat -- registry
+          branch="chore/registry-refresh"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add registry
+          git commit -m "Refresh the free-model lists discovered from the providers"
+          git push --force origin "$branch"
+          url=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // empty')
+          if [ -z "$url" ]; then
+            url=$(gh pr create --base main --head "$branch" --title "Refresh the free-model lists" \
+              --body "Automatic weekly refresh: \`pourgate registry discover --write\` re-read the free models each provider advertises. Only \`registry/*.yaml\` changed; models that disappeared are dropped, new ones are added, existing ones keep their \`verified_at\`.")
+          fi
+          # Pushes made with the workflow token do not start the pull-request checks, so run CI on the branch explicitly:
+          # its result attaches to the same commit and satisfies the required check.
+          gh workflow run ci.yml --ref "$branch"
+          gh pr merge --auto --squash "$url" || echo "Auto-merge could not be enabled; merge $url once CI is green."

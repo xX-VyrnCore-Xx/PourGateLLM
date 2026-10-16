@@ -7,14 +7,6 @@ api_key_env: XKIRO_API_KEYS
 auth: bearer
 signup_url: https://xkiro.com
 models:
-  - id: apodex/apodex-1.1-mini:free
-    tier: small
-    capabilities:
-      - chat
-    limits: {}
-    quirks: []
-    context: 262144
-    verified_at: 2026-10-15
   - id: cohere/aya-expanse-32b
     tier: medium
     capabilities:
@@ -142,30 +134,6 @@ models:
     limits: {}
     quirks: []
     context: 8192
-    verified_at: 2026-10-15
-  - id: dots-studio/dots-3-note-preview:free
-    tier: medium
-    capabilities:
-      - chat
-    limits: {}
-    quirks: []
-    context: 512000
-    verified_at: 2026-10-15
-  - id: inclusionai/ling-3.0-flash-sante:free
-    tier: small
-    capabilities:
-      - chat
-    limits: {}
-    quirks: []
-    context: 262144
-    verified_at: 2026-10-15
-  - id: liquid/lfm-2.5-2.6b:free
-    tier: small
-    capabilities:
-      - chat
-    limits: {}
-    quirks: []
-    context: 65536
     verified_at: 2026-10-15
   - id: meituan/longcat-2.0
     tier: medium

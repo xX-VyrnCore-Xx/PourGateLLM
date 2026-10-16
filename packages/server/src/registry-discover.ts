@@ -211,3 +211,13 @@ export async function discover(opts: { only?: string; fetch?: Fetcher; env?: Nod
   }
   return out;
 }
+
+/**
+ * Keeps each model's earlier `verified_at` when the model was already listed, so a refresh that finds nothing new
+ * rewrites the file byte for byte (the weekly refresh then opens no pull request) and new models get today's date.
+ */
+export function keepVerifiedDates(entry: ProviderEntry, previous: ProviderEntry | undefined): ProviderEntry {
+  if (!previous) return entry;
+  const before = new Map(previous.models.map((m) => [m.id, m.verified_at]));
+  return { ...entry, models: entry.models.map((m) => (before.get(m.id) ? { ...m, verified_at: before.get(m.id) } : m)) } as ProviderEntry;
+}

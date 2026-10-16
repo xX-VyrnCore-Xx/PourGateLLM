@@ -110,7 +110,53 @@ export interface PlaygroundResult {
   route: { provider: string | null; model: string | null; tier: string | null; complexity: string | null; cache: string | null };
 }
 
+export interface UpdateInfo {
+  enabled: boolean;
+  current: string;
+  latest?: string;
+  newer: boolean;
+  url?: string;
+  error?: string;
+}
+
+export interface HealthRow {
+  provider: string;
+  status: 'ok' | 'bad-key' | 'rate-limited' | 'model-unavailable' | 'server-error' | 'unreachable' | 'no-key';
+  model?: string;
+  httpStatus?: number;
+  ms?: number;
+  detail?: string;
+  at: number;
+  since: number;
+}
+
+export interface HealthInfo {
+  enabled: boolean;
+  checking: boolean;
+  results: HealthRow[];
+}
+
+export interface RestoreResult {
+  keys: { added: number; skipped: number };
+  tokens: { added: number; skipped: number };
+  customProviders: { added: number; skipped: number };
+  profiles: { added: number; skipped: number };
+}
+
 export const api = {
+  update: () => request<UpdateInfo>('/update'),
+  health: () => request<HealthInfo>('/health'),
+  runHealth: (provider?: string) => request<HealthInfo>('/health/run', { method: 'POST', body: JSON.stringify(provider ? { provider } : {}) }),
+  /** Encrypted backup file contents, ready to be saved. */
+  async backup(passphrase: string): Promise<string> {
+    const res = await fetch('/admin/api/backup', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ passphrase }) });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      throw new ApiError(res.status, body?.error ?? res.statusText);
+    }
+    return res.text();
+  },
+  restore: (passphrase: string, backup: unknown) => request<RestoreResult>('/restore', { method: 'POST', body: JSON.stringify({ passphrase, backup }) }),
   session: () => request<{ authenticated: boolean }>('/session'),
   login: (password: string) => request<void>('/login', { method: 'POST', body: JSON.stringify({ password }) }),
   logout: () => request<void>('/logout', { method: 'POST' }),

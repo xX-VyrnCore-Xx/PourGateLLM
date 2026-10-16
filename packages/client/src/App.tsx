@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Preferences } from './components/Preferences';
+import { UpdateBanner } from './components/UpdateBanner';
 import { Button } from './components/ui/button';
 import { api } from './lib/api';
 import { useT } from './lib/i18n';
@@ -58,6 +59,7 @@ export function App() {
           </Button>
         </div>
       </header>
+      <UpdateBanner />
       {tab === 'overview' && <Overview onUnauthorized={() => setAuth('out')} goTo={setTab} />}
       {tab === 'tokens' && <Tokens onUnauthorized={() => setAuth('out')} />}
       {tab === 'providers' && <Providers onUnauthorized={() => setAuth('out')} />}

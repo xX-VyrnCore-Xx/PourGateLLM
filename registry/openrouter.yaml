@@ -97,6 +97,17 @@ models:
     quirks: []
     context: 1000000
     verified_at: 2026-10-15
+  - id: nvidia/nemotron-3.5-super-vl:free
+    tier: medium
+    capabilities:
+      - chat
+      - tools
+      - json_mode
+      - vision
+    limits: {}
+    quirks: []
+    context: 1000000
+    verified_at: 2026-10-16
   - id: poolside/laguna-s-2.1:free
     tier: medium
     capabilities:

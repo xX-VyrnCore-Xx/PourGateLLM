@@ -313,6 +313,13 @@ Providers marked `keyless: true` in the registry work out of the box, with **no 
 
 It spends **panel size + 1** free requests per call, so use it for questions where quality matters. Tools are not supported (use a profile). Streaming works but the answer arrives in one piece once the judge is done. Response headers `x-pourgate-fusion` and `x-pourgate-fusion-panel` show what ran.
 
+## 🩺 Provider status, updates and backup
+
+- **Provider status** (dashboard → Providers): *Check now* sends one tiny real chat request to every provider that has a key (or needs none) and shows **Working / Key rejected / Rate limited / Model unavailable / Provider error / Unreachable**, the model used, the response time and since when. A provider is judged on up to three of its keys, so one dead key does not make it look down. `POURGATE_HEALTH_MINUTES=60` repeats the check in the background (minimum 15; each run costs a few tokens of free quota per provider), and `POURGATE_ALERT_WEBHOOK=<url>` receives a JSON message (`text` and `content` fields, so Slack and Discord incoming webhooks work) only when a provider switches between working and not working, never for "no key".
+- **New release notice**: the dashboard shows a banner when GitHub has a newer release than the one you run, with a link to it. It only reports: nothing is downloaded or installed. It asks GitHub at most every 6 hours; `POURGATE_UPDATE_CHECK=off` disables it, and a build from source (`dev`) never asks. The desktop app's tray menu has *Check for updates*, which opens the releases page.
+- **Backup and restore** (dashboard → Providers, bottom; or `pourgate backup create --out file` / `pourgate backup restore --file file`): one file encrypted with a passphrase (scrypt + AES-256-GCM) holding your dashboard-stored provider keys, client tokens (as hashes: they keep working but stay unreadable), your own endpoints and the fallback profiles. Keys that live in `.env` are not included. Restoring merges: it adds what is missing and never deletes or overwrites. Request logs, caches and usage counters are not part of it. The passphrase cannot be recovered (use `POURGATE_BACKUP_PASSPHRASE` in scripts instead of typing it).
+- **Registry refresh**: a weekly workflow re-reads each provider's own list of free models and opens a pull request when something changed (new models added, vanished ones dropped, old ones keep their `verified_at`); it runs the normal CI and merges itself when green. Run it by hand with `pourgate registry discover --write`.
+
 ## 🧠 Complexity routing
 
 `"model": "auto"` looks at each request and decides how much model it deserves, **without spending any provider quota** (it is a small deterministic classifier, not another LLM call).
@@ -430,6 +437,10 @@ All configuration is through environment variables (see [`.env.example`](.env.ex
 | `PORT` | `3000` | HTTP port. |
 | `POURGATE_ROUTING_STRATEGY` | `spread` | How models are ordered inside a tier: `spread` (least used first), `balanced`, `quality` or `speed` (use measured scores). |
 | `POURGATE_COMPRESSION` | `off` | `light` or `aggressive` prompt compression. |
+| `POURGATE_HEALTH_MINUTES` | `0` (off) | Re-check every provider in the background this often (minimum 15). |
+| `POURGATE_ALERT_WEBHOOK` | none | URL that receives a JSON alert when a provider stops or resumes working. |
+| `POURGATE_UPDATE_CHECK` | `on` | `off` stops the dashboard from asking GitHub for the latest release. |
+| `POURGATE_BACKUP_PASSPHRASE` | none | Passphrase for `pourgate backup` in scripts. |
 | `POURGATE_OLLAMA_API` | off | Serve the Ollama-compatible API under `/api`. |
 | `POURGATE_FUSION_PANEL` | `3` | Models asked by the `fusion` virtual model (2-5). |
 | `POURGATE_PROFILES_FILE` | `profiles.yaml` | Named fallback chains (`auto:<name>`). |
