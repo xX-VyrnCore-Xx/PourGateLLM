@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { providerSchema } from '@pourgate/shared';
-import { discover, guessTier, toModel, SOURCES } from '../src/registry-discover.js';
+import { discover, guessTier, keepVerifiedDates, toModel, SOURCES } from '../src/registry-discover.js';
 
 const reply = (body: unknown, status = 200) => async () => ({ ok: status < 400, status, json: async () => body });
 const kilo = SOURCES.find((s) => s.provider === 'kilo')!;
@@ -45,5 +45,16 @@ describe('registry discover', () => {
       throw new Error('offline');
     };
     expect((await discover({ sources: [kilo], fetch: boom }))[0]?.error).toBe('offline');
+  });
+});
+
+describe('keepVerifiedDates', () => {
+  const model = (id: string, verified_at: string) => ({ id, capabilities: ['chat' as const], limits: {}, quirks: [], verified_at });
+  const entry = (models: ReturnType<typeof model>[]) => ({ provider: 'p', base_url: 'https://p.test/v1', api_key_env: 'P_API_KEYS', auth: 'bearer' as const, models });
+
+  it('keeps old dates for known models and stamps only the new ones', () => {
+    const merged = keepVerifiedDates(entry([model('old', '2026-10-16'), model('new', '2026-10-16')]), entry([model('old', '2026-01-01')]));
+    expect(merged.models.map((m) => [m.id, m.verified_at])).toEqual([['old', '2026-01-01'], ['new', '2026-10-16']]);
+    expect(keepVerifiedDates(entry([model('a', '2026-10-16')]), undefined).models[0]?.verified_at).toBe('2026-10-16');
   });
 });

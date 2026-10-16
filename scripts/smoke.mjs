@@ -207,6 +207,23 @@ try {
     const viaToken = await fetch(`${base}/v1/models`, { headers: { authorization: `Bearer ${token.token}` } });
     assert(viaToken.ok, 'a freshly created client token does not work');
   });
+  await step('provider status, update check and encrypted backup/restore work', async () => {
+    const login = await fetch(`${base}/admin/api/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'smoke-password-123' }) });
+    const cookie = login.headers.get('set-cookie').split(';')[0];
+    const api = (path, body) => fetch(`${base}/admin/api${path}`, body === undefined ? { headers: { cookie } } : { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify(body) });
+    const health = await (await api('/health/run', {})).json();
+    const fake = health.results.find((r) => r.provider === 'fake');
+    assert(fake && fake.status === 'ok' && fake.model, `provider status wrong: ${JSON.stringify(fake)}`);
+    const update = await (await api('/update')).json();
+    assert(update.enabled === false && update.newer === false, 'a source build must not check for updates');
+    assert((await api('/backup', { passphrase: 'short' })).status === 400, 'a short passphrase must be refused');
+    const res = await api('/backup', { passphrase: 'smoke backup passphrase' });
+    const text = await res.text();
+    assert(res.ok && !text.includes('key-good') && JSON.parse(text).format === 'pourgate-backup', 'backup file wrong or leaks a key');
+    assert((await api('/restore', { passphrase: 'not the passphrase', backup: JSON.parse(text) })).status === 400, 'a wrong passphrase must be refused');
+    const restored = await (await api('/restore', { passphrase: 'smoke backup passphrase', backup: JSON.parse(text) })).json();
+    assert(restored.tokens.skipped >= 1 && restored.tokens.added === 0, `restore must merge, not duplicate: ${JSON.stringify(restored)}`);
+  });
   await step('metrics require their token', async () => {
     const open = await fetch(`${base}/metrics`);
     assert(open.status === 401, `unauthenticated /metrics gave ${open.status}`);

@@ -9,6 +9,9 @@ import type { LatencyTracker } from './latency.js';
 import { KeyStoreError, MAX_KEYS_PER_PROVIDER, type KeyStore } from './keys.js';
 import type { Profiles } from './profiles.js';
 import { probeProvider } from './registry-verify.js';
+import { BackupError, collectBackup, decryptBackup, encryptBackup, restoreBackup } from './backup.js';
+import type { HealthMonitor } from './health.js';
+import type { UpdateChecker } from './update.js';
 import { CustomProviderError, detectModels, envNameFor, type CustomProviders } from './customproviders.js';
 import type { ResponseCache } from './cache.js';
 import type { EvalRunner, EvalStore, Strategy } from './evals.js';
@@ -37,6 +40,8 @@ export interface AdminOptions {
   /** Dashboard-defined OpenAI-compatible endpoints; `onCustomChange` re-applies them to the registry. */
   customProviders?: CustomProviders;
   onCustomChange?: () => void;
+  update?: UpdateChecker;
+  health?: HealthMonitor;
   /** Named fallback chains editable from the dashboard; `onProfilesChange` persists them. */
   profiles?: Profiles;
   onProfilesChange?: () => void;
@@ -497,6 +502,55 @@ export function createAdminRoutes(opts: AdminOptions): Hono {
     const r = await probeProvider(entry, secret.key, { fetch: opts.fetch as never, timeoutMs: 25_000 });
     // A rate-limited answer still proves the key is accepted.
     return c.json({ ok: r.status === 'ok' || r.status === 'rate-limited', status: r.httpStatus ?? null, result: r.status, model: r.model ?? null, ms: r.ms ?? null, detail: r.detail ?? null });
+  });
+
+  // Is a newer release out? Reports only; nothing is downloaded.
+  app.get('/update', async (c) => c.json(opts.update ? await opts.update.status(c.req.query('force') === '1') : { enabled: false, current: 'dev', newer: false }));
+
+  // Real status of every provider (tiny chat probe per provider). The run costs a few tokens of free quota.
+  app.get('/health', (c) => c.json({ enabled: opts.health !== undefined, checking: opts.health?.checking ?? false, results: opts.health?.snapshot() ?? [] }));
+  const healthLimiter = new SlidingWindow(60_000, now);
+  app.post('/health/run', async (c) => {
+    if (!opts.health) return c.json({ error: 'status checks are not configured' }, 404);
+    if (!healthLimiter.take('run', 6)) return c.json({ error: 'too many checks, retry in a minute' }, 429);
+    const body = (await c.req.json().catch(() => null)) as { provider?: unknown } | null;
+    const only = typeof body?.provider === 'string' ? body.provider : undefined;
+    if (only && !providerByName(only)) return c.json({ error: 'unknown provider' }, 404);
+    const results = await opts.health.check(only);
+    opts.audit?.record('health_check', { ip: clientIp(c), target: only ?? 'all' });
+    return c.json({ enabled: true, checking: false, results });
+  });
+
+  // Encrypted backup of keys, tokens (hashes), custom endpoints and profiles; restore merges and never deletes.
+  const backupLimiter = new SlidingWindow(60_000, now);
+  app.post('/backup', async (c) => {
+    if (!backupLimiter.take('backup', 5)) return c.json({ error: 'too many requests, retry in a minute' }, 429);
+    const body = (await c.req.json().catch(() => null)) as { passphrase?: unknown } | null;
+    try {
+      const payload = collectBackup({ keyStore: opts.keyStore, tokens: opts.store, custom: opts.customProviders, profiles: opts.profiles });
+      const envelope = encryptBackup(payload, typeof body?.passphrase === 'string' ? body.passphrase : '');
+      opts.audit?.record('backup_create', { ip: clientIp(c), detail: `${payload.keys.length} keys, ${payload.tokens.length} tokens` });
+      return c.body(JSON.stringify(envelope), 200, { 'content-type': 'application/json', 'content-disposition': 'attachment; filename="pourgate-backup.json"', 'cache-control': 'no-store' });
+    } catch (e) {
+      if (e instanceof BackupError) return c.json({ error: e.message }, 400);
+      throw e;
+    }
+  });
+  app.post('/restore', async (c) => {
+    if (!backupLimiter.take('restore', 5)) return c.json({ error: 'too many requests, retry in a minute' }, 429);
+    const body = (await c.req.json().catch(() => null)) as { passphrase?: unknown; backup?: unknown } | null;
+    try {
+      const payload = decryptBackup(body?.backup, typeof body?.passphrase === 'string' ? body.passphrase : '');
+      const result = restoreBackup(payload, { keyStore: opts.keyStore, tokens: opts.store, custom: opts.customProviders, profiles: opts.profiles, taken: opts.reservedNames?.() });
+      opts.poolManager?.refresh();
+      opts.onCustomChange?.();
+      opts.onProfilesChange?.();
+      opts.audit?.record('backup_restore', { ip: clientIp(c), detail: `${result.keys.added} keys, ${result.tokens.added} tokens added` });
+      return c.json(result);
+    } catch (e) {
+      if (e instanceof BackupError) return c.json({ error: e.message }, 400);
+      throw e;
+    }
   });
 
   app.get('/providers', (c) =>

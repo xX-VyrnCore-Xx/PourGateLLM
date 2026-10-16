@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Dashboard: **provider status** (real tiny request per provider, up to 3 keys judged, optional background checks `POURGATE_HEALTH_MINUTES` and alerts `POURGATE_ALERT_WEBHOOK` on working <-> not working), **new-release banner** (`POURGATE_UPDATE_CHECK=off` disables; reports only, installs nothing; the desktop tray has *Check for updates*), and **encrypted backup/restore** of stored keys, token hashes, custom endpoints and profiles (also `pourgate backup create|restore`; restore merges, never deletes).
+- Registry: weekly `registry-refresh` workflow opens (and auto-merges once CI is green) a pull request when providers' free-model lists change; `registry discover --write` keeps `verified_at` for known models and leaves unchanged files untouched. CI can now also be started by hand (`workflow_dispatch`).
+- Versions: the release workflows stamp `POURGATE_VERSION` into the build (before, `/api/version` was hard-coded).
 - Desktop app: tray icon (open, browser, data folder, log, restart gateway, start with the system, **Quit and stop the gateway**); closing the window hides it to the tray; single instance; free-port fallback; the gateway is tied to the app by a Windows job object, and the NSIS installer/uninstaller stop PourGateLLM and its gateway first, so the uninstaller no longer fails on a locked `node.exe`. Compiled for Windows and Linux; the tray and the uninstall hook have not been run on a real Windows machine.
 - Providers: ch.at (anonymous OpenAI-compatible endpoint, one model).
 - Security: gateway listens on 127.0.0.1 by default (`POURGATE_HOST`; **behaviour change** for anyone reaching it from another machine), strict CSP and security headers for the dashboard, failed-auth throttling on the API, dashboard passwords under 8 characters refused, hardened compose files (`no-new-privileges`, no capabilities, loopback port), release checksums verified by the installers and signed build-provenance attestations.

@@ -77,6 +77,17 @@ models:
     quirks: []
     context: 1000000
     verified_at: 2026-10-15
+  - id: nvidia/nemotron-3.5-super-vl:free
+    tier: medium
+    capabilities:
+      - chat
+      - tools
+      - json_mode
+      - vision
+    limits: {}
+    quirks: []
+    context: 1000000
+    verified_at: 2026-10-16
   - id: openrouter/free
     tier: medium
     capabilities:
@@ -105,16 +116,6 @@ models:
     limits: {}
     quirks: []
     context: 262144
-    verified_at: 2026-10-15
-  - id: stepfun/step-5-preview-free
-    tier: medium
-    capabilities:
-      - chat
-      - tools
-      - vision
-    limits: {}
-    quirks: []
-    context: 1000000
     verified_at: 2026-10-15
   - id: thinkingmachines/inkling-small:free
     tier: small

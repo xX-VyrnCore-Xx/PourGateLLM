@@ -22,6 +22,7 @@ use tauri_plugin_opener::OpenerExt as _;
 
 const PREFERRED_PORT: u16 = 43117;
 const MAIN: &str = "main";
+const RELEASES: &str = "https://github.com/xX-VyrnCore-Xx/PourGateLLM/releases/latest";
 
 /// The gateway child process plus what is needed to start it again.
 struct Gateway {
@@ -206,6 +207,7 @@ struct Labels {
     data: &'static str,
     log: &'static str,
     restart: &'static str,
+    updates: &'static str,
     autostart: &'static str,
     quit: &'static str,
 }
@@ -219,6 +221,7 @@ fn labels() -> Labels {
             data: "Apri la cartella dei dati",
             log: "Apri il file di log",
             restart: "Riavvia il gateway",
+            updates: "Controlla aggiornamenti",
             autostart: "Avvia con Windows",
             quit: "Esci e chiudi il gateway",
         }
@@ -229,6 +232,7 @@ fn labels() -> Labels {
             data: "Open the data folder",
             log: "Open the log file",
             restart: "Restart the gateway",
+            updates: "Check for updates",
             autostart: "Start with the system",
             quit: "Quit and stop the gateway",
         }
@@ -242,12 +246,13 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let data = MenuItem::with_id(app, "data", l.data, true, None::<&str>)?;
     let log = MenuItem::with_id(app, "log", l.log, true, None::<&str>)?;
     let restart = MenuItem::with_id(app, "restart", l.restart, true, None::<&str>)?;
+    let updates = MenuItem::with_id(app, "updates", l.updates, true, None::<&str>)?;
     let enabled = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(app, "autostart", l.autostart, true, enabled, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", l.quit, true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&open, &browser, &sep1, &data, &log, &restart, &autostart, &sep2, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &browser, &sep1, &data, &log, &restart, &updates, &autostart, &sep2, &quit])?;
 
     let mut builder = TrayIconBuilder::with_id("tray")
         .tooltip("PourGateLLM")
@@ -268,6 +273,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 open_path(app, &log);
             }
             "restart" => restart_gateway(app),
+            "updates" => open_url(app, RELEASES),
             "autostart" => {
                 let manager = app.autolaunch();
                 let _ = if manager.is_enabled().unwrap_or(false) { manager.disable() } else { manager.enable() };

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { FallbackProfiles } from '../components/FallbackProfiles';
 import { CustomProviders } from '../components/CustomProviders';
+import { BackupRestore } from '../components/BackupRestore';
 import { ModelQuality } from '../components/ModelQuality';
+import { ProviderStatus } from '../components/ProviderStatus';
 import { ProviderKeys } from '../components/ProviderKeys';
 import { Button } from '../components/ui/button';
 import { Badge, Card } from '../components/ui/card';
@@ -40,6 +42,7 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {error && <p role="alert" className="text-sm text-red-600 md:col-span-2">{error}</p>}
+      <ProviderStatus onUnauthorized={onUnauthorized} />
       <ModelQuality onUnauthorized={onUnauthorized} />
       <Card className="md:col-span-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -114,6 +117,7 @@ export function Providers({ onUnauthorized }: { onUnauthorized: () => void }) {
           <ProviderKeys provider={p.provider} onChanged={load} onUnauthorized={onUnauthorized} />
         </Card>
       ))}
+      <BackupRestore onUnauthorized={onUnauthorized} onRestored={load} />
     </div>
   );
 }
