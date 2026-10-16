@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Desktop app: tray icon (open, browser, data folder, log, restart gateway, start with the system, **Quit and stop the gateway**); closing the window hides it to the tray; single instance; free-port fallback; the gateway is tied to the app by a Windows job object, and the NSIS installer/uninstaller stop PourGateLLM and its gateway first, so the uninstaller no longer fails on a locked `node.exe`. Compiled for Windows and Linux; the tray and the uninstall hook have not been run on a real Windows machine.
+- Providers: ch.at (anonymous OpenAI-compatible endpoint, one model).
 - Security: gateway listens on 127.0.0.1 by default (`POURGATE_HOST`; **behaviour change** for anyone reaching it from another machine), strict CSP and security headers for the dashboard, failed-auth throttling on the API, dashboard passwords under 8 characters refused, hardened compose files (`no-new-privileges`, no capabilities, loopback port), release checksums verified by the installers and signed build-provenance attestations.
 - Repository: Dependabot (npm daily, actions/docker/cargo weekly) with auto-merge for minor/patch, CodeQL, dependency review, least-privilege workflows, CODEOWNERS.
 - Releases: older ones are pruned automatically, keeping the newest three (`.github/workflows/cleanup-releases.yml`).

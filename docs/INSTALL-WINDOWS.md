@@ -33,7 +33,8 @@ Press `Win + R` and paste `%APPDATA%\dev.pourgatellm.desktop` to open the folder
 ### Updating and removing
 
 - **Update:** download the new installer and run it over the old one; your data stays.
-- **Remove:** *Settings → Apps → PourGateLLM → Uninstall*. Delete the data folder above as well if you want everything gone (this erases stored keys and tokens).
+- **Quit:** right-click the PourGateLLM icon in the tray (next to the clock) → **Quit and stop the gateway**. Closing the window only hides it to the tray.
+- **Remove:** quit from the tray, then *Settings → Apps → PourGateLLM → Uninstall* (the uninstaller also stops PourGateLLM and its gateway). Version 0.6.1 and earlier have no tray: if the uninstall fails, end `PourGateLLM.exe` and its `node.exe` in Task Manager first. Delete the data folder above as well if you want everything gone (this erases stored keys and tokens).
 
 ### If it does not start
 

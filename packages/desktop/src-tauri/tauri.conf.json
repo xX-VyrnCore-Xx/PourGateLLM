@@ -34,7 +34,8 @@
           "English",
           "Italian"
         ],
-        "displayLanguageSelector": true
+        "displayLanguageSelector": true,
+        "installerHooks": "windows/hooks.nsh"
       }
     }
   }
