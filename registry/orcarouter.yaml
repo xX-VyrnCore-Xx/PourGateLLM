@@ -14,6 +14,13 @@ models:
     limits: {}
     quirks: []
     verified_at: 2026-10-15
+  - id: deepseek/deepseek-v4.1-flash-free
+    tier: small
+    capabilities:
+      - chat
+    limits: {}
+    quirks: []
+    verified_at: 2026-10-19
   - id: tencent/hy3-free
     tier: medium
     capabilities:
