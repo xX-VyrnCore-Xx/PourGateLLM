@@ -146,3 +146,13 @@ models:
     quirks: []
     context: 1048576
     verified_at: 2026-10-15
+  - id: xingchen-agi/xing4.0-29b-a4b:free
+    tier: medium
+    capabilities:
+      - chat
+      - tools
+      - json_mode
+    limits: {}
+    quirks: []
+    context: 262144
+    verified_at: 2026-10-19
